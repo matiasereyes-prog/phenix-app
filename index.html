@@ -2205,7 +2205,11 @@ function formatFecha(str) {
   return `${d} ${meses[parseInt(m)-1]} ${y}`;
 }
 
-function openModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow='hidden'; }
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+  document.body.style.overflow='hidden';
+  if (id === 'modal-nuevo-seguro') setTimeout(cargarVehiculosEnSeguroModal, 150);
+}
 function closeModal(id) { document.getElementById(id).classList.remove('show'); document.body.style.overflow=''; }
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
@@ -2758,8 +2762,10 @@ function calcularPrimaTotal() {
 
 async function cargarVehiculosEnSeguroModal() {
   const { data } = await sbAdmin.from('vehiculos').select('id, marca, modelo, anio, patente').eq('flota_propia', true).order('marca');
-  const sel = document.getElementById('ns-vehiculo');
-  if (!data) return;
+  // Use querySelector inside the modal to avoid conflicts
+  const modal = document.getElementById('modal-nuevo-seguro');
+  const sel = modal ? modal.querySelector('#ns-vehiculo') : document.getElementById('ns-vehiculo');
+  if (!data || !sel) return;
   sel.innerHTML = '<option value="">Seleccioná un vehículo...</option>' +
     data.map(v => '<option value="' + v.id + '">' + v.marca + ' ' + v.modelo + ' ' + v.anio + (v.patente ? ' · ' + v.patente : '') + '</option>').join('');
 }
