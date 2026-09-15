@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -2780,61 +2781,138 @@ async function guardarContacto() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// ESTADÍSTICAS DE LEADS
+// ESTADÍSTICAS DE LEADS — DASHBOARD MEJORADO
 // ══════════════════════════════════════════════════════════════════
+let leadsChartFunnel = null;
+let leadsChartCanal = null;
+let leadsChartTrend = null;
+
 async function loadLeadsStats() {
-  const { data: leads } = await sbAdmin.from('leads').select('estado, canal, red_origen, responsable, created_at');
+  const { data: leads } = await sbAdmin.from('leads').select('estado, canal, red_origen, responsable, created_at, campana');
   if (!leads || !leads.length) return;
 
   const total = leads.length;
   const convertidos = leads.filter(l => l.estado === 'convertido').length;
+  const rechazados = leads.filter(l => l.estado === 'rechazado').length;
+  const activos = total - convertidos - rechazados;
   const tasa = total > 0 ? Math.round((convertidos / total) * 100) : 0;
 
-  // Por estado
-  const porEstado = {};
-  leads.forEach(l => { porEstado[l.estado] = (porEstado[l.estado] || 0) + 1; });
+  // Embudo
+  const etapas = ['nuevo', 'contactado', 'calificado', 'cotizado', 'convertido'];
+  const etapaLabels = ['Nuevo', 'Contactado', 'Calificado', 'Cotizado', 'Convertido'];
+  const etapaCounts = etapas.map(e => leads.filter(l => l.estado === e).length);
 
   // Por canal
   const porCanal = {};
   leads.forEach(l => { const c = l.red_origen || l.canal || 'directo'; porCanal[c] = (porCanal[c] || 0) + 1; });
 
+  // Tendencia por mes (últimos 6 meses)
+  const meses = {};
+  leads.forEach(l => {
+    if (l.created_at) {
+      const mes = l.created_at.slice(0, 7); // YYYY-MM
+      meses[mes] = (meses[mes] || 0) + 1;
+    }
+  });
+  const mesesOrdenados = Object.keys(meses).sort().slice(-6);
+  const mesesLabels = mesesOrdenados.map(m => {
+    const [y, mo] = m.split('-');
+    const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return mNames[parseInt(mo)-1] + ' ' + y.slice(2);
+  });
+
   // Por responsable
   const porResp = {};
   leads.forEach(l => { if (l.responsable) porResp[l.responsable] = (porResp[l.responsable] || 0) + 1; });
 
-  const statsHtml = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">' +
-    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
-      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total leads</div>' +
-      '<div style="font-size:28px;font-weight:800;color:var(--black)">' + total + '</div></div>' +
-    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
-      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Convertidos</div>' +
-      '<div style="font-size:28px;font-weight:800;color:var(--green)">' + convertidos + '</div></div>' +
-    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
-      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Tasa conversión</div>' +
-      '<div style="font-size:28px;font-weight:800;color:var(--orange)">' + tasa + '%</div></div>' +
+  const statsHtml =
+    // KPIs
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">' +
+      kpiCard('Total leads', total, 'var(--black)', '👥') +
+      kpiCard('Activos', activos, 'var(--blue)', '⚡') +
+      kpiCard('Convertidos', convertidos, 'var(--green)', '✅') +
+      kpiCard('Tasa conversión', tasa + '%', 'var(--orange)', '📈') +
     '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-      '<div style="background:var(--gray);border-radius:10px;padding:14px">' +
-        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Por canal</div>' +
-        Object.entries(porCanal).sort((a,b) => b[1]-a[1]).map(([k,v]) =>
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
-          '<span style="color:var(--text2);text-transform:capitalize">' + k + '</span>' +
-          '<span style="font-weight:700;color:var(--text)">' + v + ' <span style="color:var(--text3);font-weight:400">(' + Math.round(v/total*100) + '%)</span></span></div>'
-        ).join('') +
+    // Charts
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">' +
+      '<div style="background:var(--gray);border-radius:12px;padding:16px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Embudo de conversión</div>' +
+        '<canvas id="chart-funnel" height="180"></canvas>' +
       '</div>' +
-      '<div style="background:var(--gray);border-radius:10px;padding:14px">' +
-        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Por estado</div>' +
-        Object.entries(porEstado).sort((a,b) => b[1]-a[1]).map(([k,v]) =>
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
-          '<span style="color:var(--text2);text-transform:capitalize">' + k.replace(/_/g,' ') + '</span>' +
-          '<span style="font-weight:700;color:var(--text)">' + v + '</span></div>'
-        ).join('') +
+      '<div style="background:var(--gray);border-radius:12px;padding:16px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Por canal de origen</div>' +
+        '<canvas id="chart-canal" height="180"></canvas>' +
+      '</div>' +
+      '<div style="background:var(--gray);border-radius:12px;padding:16px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Tendencia mensual</div>' +
+        '<canvas id="chart-trend" height="180"></canvas>' +
+      '</div>' +
+    '</div>' +
+    // Responsables
+    '<div style="background:var(--gray);border-radius:12px;padding:16px;margin-bottom:20px">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Por ejecutivo</div>' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+      Object.entries(porResp).sort((a,b) => b[1]-a[1]).map(([k,v]) =>
+        '<div style="background:white;border-radius:8px;padding:10px 16px;text-align:center;min-width:100px">' +
+        '<div style="font-size:20px;font-weight:800;color:var(--black)">' + v + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + k + '</div></div>'
+      ).join('') +
       '</div>' +
     '</div>';
 
-  // Insert stats before leads table
   const statsContainer = document.getElementById('leads-stats-container');
-  if (statsContainer) statsContainer.innerHTML = statsHtml;
+  if (statsContainer) {
+    statsContainer.innerHTML = statsHtml;
+
+    // Destroy existing charts
+    if (leadsChartFunnel) { leadsChartFunnel.destroy(); leadsChartFunnel = null; }
+    if (leadsChartCanal) { leadsChartCanal.destroy(); leadsChartCanal = null; }
+    if (leadsChartTrend) { leadsChartTrend.destroy(); leadsChartTrend = null; }
+
+    // Funnel chart
+    setTimeout(() => {
+      const ctxF = document.getElementById('chart-funnel');
+      if (ctxF) leadsChartFunnel = new Chart(ctxF, {
+        type: 'bar',
+        data: {
+          labels: etapaLabels,
+          datasets: [{ data: etapaCounts, backgroundColor: ['#e2e8f0','#93c5fd','#6ee7b7','#fde68a','#4ade80'], borderRadius: 6 }]
+        },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { display: false } } } }
+      });
+
+      // Canal chart
+      const ctxC = document.getElementById('chart-canal');
+      const canalKeys = Object.keys(porCanal);
+      const canalColors = ['#3b82f6','#f97316','#22c55e','#a855f7','#ec4899','#14b8a6'];
+      if (ctxC) leadsChartCanal = new Chart(ctxC, {
+        type: 'doughnut',
+        data: {
+          labels: canalKeys.map(k => k.charAt(0).toUpperCase() + k.slice(1)),
+          datasets: [{ data: canalKeys.map(k => porCanal[k]), backgroundColor: canalColors, borderWidth: 0 }]
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 8 } } }, cutout: '65%' }
+      });
+
+      // Trend chart
+      const ctxT = document.getElementById('chart-trend');
+      if (ctxT) leadsChartTrend = new Chart(ctxT, {
+        type: 'line',
+        data: {
+          labels: mesesLabels,
+          datasets: [{ label: 'Leads', data: mesesOrdenados.map(m => meses[m] || 0), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.4, pointRadius: 4 }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } } } }
+      });
+    }, 50);
+  }
+}
+
+function kpiCard(label, value, color, icon) {
+  return '<div style="background:var(--gray);border-radius:12px;padding:16px;text-align:center">' +
+    '<div style="font-size:20px;margin-bottom:4px">' + icon + '</div>' +
+    '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + label + '</div>' +
+    '<div style="font-size:28px;font-weight:800;color:' + color + ';letter-spacing:-1px">' + value + '</div></div>';
 }
 
 // ══════════════════════════════════════════════════════════════════
