@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Phenix Leasing · Backend</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -370,7 +371,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="card">
       <div style="overflow-x:auto">
         <table class="data-table">
-          <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th>Activo</th><th>Acciones</th></tr></thead>
           <tbody id="tbody-usuarios"></tbody>
         </table>
       </div>
@@ -621,32 +622,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   </div>
 </div>
 
-<!-- ══ MODAL: DETALLE LEASING ══════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-detalle-lease">
-  <div class="modal-card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
-      <div>
-        <div class="modal-title" id="det-titulo">Leasing</div>
-        <div id="det-badge" style="margin-top:6px"></div>
-      </div>
-      <button onclick="closeModal('modal-detalle-lease')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
-    </div>
-    <div class="detail-grid" id="det-grid"></div>
-    <div style="margin-top:4px">
-      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Progreso cuotas</div>
-      <div class="progress-bar"><div class="progress-fill" id="det-progress" style="width:0%"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-top:4px">
-        <span id="det-cuotas-pagas">0 pagas</span>
-        <span id="det-cuotas-total">de 36</span>
-      </div>
-    </div>
-    <div class="modal-footer" style="margin-top:20px">
-      <button class="btn btn-outline" onclick="closeModal('modal-detalle-lease')">Cerrar</button>
-      <button class="btn btn-dark" onclick="editarEstadoLease()" id="btn-editar-estado">Cambiar estado</button>
-    </div>
-    <div id="det-msg" style="margin-top:10px"></div>
-  </div>
-</div>
+
 
 <!-- ══ MODAL: DETALLE LEAD ══════════════════════════════════════ -->
 <div class="modal-overlay" id="modal-detalle-lead">
@@ -676,6 +652,86 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button class="btn btn-dark" onclick="actualizarLead()">Guardar cambios</button>
     </div>
     <div id="lead-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: DETALLE LEASING COMPLETO ══════════════════════════ -->
+<div class="modal-overlay" id="modal-lease-detail">
+  <div class="modal-card" style="max-width:640px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div class="modal-title" id="ld-titulo">Detalle del leasing</div>
+        <div id="ld-badge" style="margin-top:6px"></div>
+      </div>
+      <button onclick="closeModal('modal-lease-detail')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
+    </div>
+
+    <!-- Info general -->
+    <div class="detail-grid" id="ld-grid" style="margin-bottom:20px"></div>
+
+    <!-- Progreso cuotas -->
+    <div style="background:var(--gray);border-radius:12px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">Progreso cuotas</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text3)" id="ld-cuotas-pct">0%</span>
+      </div>
+      <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" id="ld-progress" style="width:0%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--green);font-weight:700" id="ld-cuotas-pagas">0 pagas</span>
+        <span style="color:var(--yellow);font-weight:700" id="ld-cuotas-vencidas">0 vencidas</span>
+        <span style="color:var(--text3);font-weight:700" id="ld-cuotas-pendientes">0 pendientes</span>
+      </div>
+    </div>
+
+    <!-- Escrow blockchain -->
+    <div id="ld-escrow-section" style="display:none;background:var(--black);border-radius:12px;padding:20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:white;display:flex;align-items:center;gap:8px">
+          ⛓ Escrow blockchain
+          <div class="badge badge-blue" id="ld-chain-badge">Base</div>
+        </div>
+        <a id="ld-basescan-link" href="#" target="_blank" style="font-size:12px;color:#60a5fa;font-family:var(--mono)">Ver en Basescan ↗</a>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Total</div>
+          <div style="font-size:20px;font-weight:800;color:white;font-family:var(--mono)" id="ld-escrow-total">—</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Liberado</div>
+          <div style="font-size:20px;font-weight:800;color:#4ade80;font-family:var(--mono)" id="ld-escrow-liberado">—</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Bloqueado</div>
+          <div style="font-size:20px;font-weight:800;color:#fbbf24;font-family:var(--mono)" id="ld-escrow-bloqueado">—</div>
+        </div>
+      </div>
+
+      <!-- Condiciones -->
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Condiciones de liberación</div>
+      <div id="ld-condiciones" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
+
+      <!-- Acciones blockchain -->
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-green btn-sm" onclick="ejecutarCompleteCondition()" id="btn-complete-cond-detail">✓ Marcar condición</button>
+        <button class="btn btn-sm" style="background:#ef4444;color:white" onclick="ejecutarDisputa()">⚠️ Iniciar disputa</button>
+        <a id="ld-basescan-btn" href="#" target="_blank" class="btn btn-outline btn-sm">Basescan ↗</a>
+      </div>
+      <div id="ld-blockchain-msg" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Cambiar estado -->
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <select class="form-select" id="ld-nuevo-estado" style="flex:1">
+        <option value="borrador">Borrador</option>
+        <option value="activo">Activo</option>
+        <option value="completado">Completado</option>
+        <option value="cancelado">Cancelado</option>
+        <option value="disputado">Disputado</option>
+      </select>
+      <button class="btn btn-dark" onclick="actualizarEstadoLease()">Guardar estado</button>
+    </div>
+    <div id="ld-msg" style="margin-top:10px"></div>
   </div>
 </div>
 
@@ -750,6 +806,11 @@ const sbAdmin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
 });
 
 let currentUser = null;
+let walletConnected = false;
+const LEASE_ABI = [
+  { inputs: [{ name: "leaseId", type: "uint256" }, { name: "conditionIndex", type: "uint256" }, { name: "favorLessor", type: "bool" }], name: "completeCondition", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ name: "leaseId", type: "uint256" }], name: "raiseDispute", outputs: [], stateMutability: "nonpayable", type: "function" },
+];
 let allLeasings = [];
 let allLeads = [];
 let currentLeaseId = null;
@@ -922,16 +983,24 @@ async function abrirDetalleLease(id) {
     .select('*, usuarios!contratos_usuario_id_fkey(nombre,email,telefono), vehiculos(marca,modelo,anio,vin,patente)')
     .eq('id', id).single();
   const { data: cuotas } = await sbAdmin.from('cuotas').select('estado').eq('contrato_id', id);
+  const { data: condiciones } = await sbAdmin.from('condiciones_escrow').select('*').eq('contrato_id', id).order('index_onchain');
+
   const pagas = (cuotas||[]).filter(c=>c.estado==='paga').length;
+  const vencidas = (cuotas||[]).filter(c=>c.estado==='vencida').length;
+  const pendientes = (cuotas||[]).filter(c=>c.estado==='pendiente').length;
   const total = (cuotas||[]).length;
+  const pct = total > 0 ? Math.round((pagas/total)*100) : 0;
 
-  document.getElementById('det-titulo').textContent = l.vehiculos ? `${l.vehiculos.marca} ${l.vehiculos.modelo} ${l.vehiculos.anio}` : 'Leasing';
-  document.getElementById('det-badge').innerHTML = estadoBadge(l.estado);
-  document.getElementById('det-progress').style.width = total > 0 ? `${(pagas/total)*100}%` : '0%';
-  document.getElementById('det-cuotas-pagas').textContent = `${pagas} pagas`;
-  document.getElementById('det-cuotas-total').textContent = `de ${total}`;
+  document.getElementById('ld-titulo').textContent = l.vehiculos ? `${l.vehiculos.marca} ${l.vehiculos.modelo} ${l.vehiculos.anio}` : 'Leasing';
+  document.getElementById('ld-badge').innerHTML = estadoBadge(l.estado);
+  document.getElementById('ld-progress').style.width = pct + '%';
+  document.getElementById('ld-cuotas-pct').textContent = pct + '%';
+  document.getElementById('ld-cuotas-pagas').textContent = `${pagas} pagas`;
+  document.getElementById('ld-cuotas-vencidas').textContent = `${vencidas} vencidas`;
+  document.getElementById('ld-cuotas-pendientes').textContent = `${pendientes} pendientes`;
+  document.getElementById('ld-nuevo-estado').value = l.estado;
 
-  document.getElementById('det-grid').innerHTML = [
+  document.getElementById('ld-grid').innerHTML = [
     ['Cliente', l.usuarios?.nombre || '—'],
     ['Email', l.usuarios?.email || '—'],
     ['Teléfono', l.usuarios?.telefono || '—'],
@@ -946,7 +1015,96 @@ async function abrirDetalleLease(id) {
     ['Patente', l.vehiculos?.patente || '—'],
   ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
 
-  openModal('modal-detalle-lease');
+  // Escrow section
+  if (l.tipo === 'escrow_blockchain' && l.contrato_address_onchain) {
+    document.getElementById('ld-escrow-section').style.display = 'block';
+    document.getElementById('ld-escrow-total').textContent = `${l.escrow_monto || 0} ${l.escrow_token}`;
+    document.getElementById('ld-escrow-liberado').textContent = `${l.escrow_liberado || 0} ${l.escrow_token}`;
+    document.getElementById('ld-escrow-bloqueado').textContent = `${l.escrow_bloqueado || 0} ${l.escrow_token}`;
+    const basescanUrl = `https://basescan.org/address/${l.contrato_address_onchain}`;
+    document.getElementById('ld-basescan-link').href = basescanUrl;
+    document.getElementById('ld-basescan-btn').href = basescanUrl;
+
+    // Render condiciones
+    const condsEl = document.getElementById('ld-condiciones');
+    if (condiciones && condiciones.length) {
+      condsEl.innerHTML = condiciones.map(c => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:${c.estado==='cumplida'?'rgba(74,222,128,0.1)':'rgba(255,255,255,0.05)'}">
+          <span style="font-size:13px">${c.estado==='cumplida'?'✅':'⏳'}</span>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:white">${c.descripcion}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.4);font-family:var(--mono)">${c.porcentaje_bps/100}% · índice #${c.index_onchain}</div>
+          </div>
+          ${c.estado==='cumplida' 
+            ? `<span style="font-size:11px;color:#4ade80;font-weight:700;font-family:var(--mono)">${c.monto_liberado||0} ${l.escrow_token}</span>`
+            : `<button class="btn btn-sm" style="background:rgba(255,255,255,0.1);color:white;font-size:11px" onclick="marcarCondicion(${c.index_onchain})">Marcar</button>`
+          }
+        </div>
+      `).join('');
+    } else {
+      condsEl.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">Sin condiciones registradas</div>';
+    }
+  } else {
+    document.getElementById('ld-escrow-section').style.display = 'none';
+  }
+
+  openModal('modal-lease-detail');
+}
+
+async function actualizarEstadoLease() {
+  const estado = document.getElementById('ld-nuevo-estado').value;
+  const { error } = await sbAdmin.from('contratos').update({ estado }).eq('id', currentLeaseId);
+  if (error) { document.getElementById('ld-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  await registrarLog('cambio_estado_lease', `Cambió estado del lease ${currentLeaseId} a ${estado}`);
+  showToast(`✓ Estado actualizado a ${estado}`);
+  closeModal('modal-lease-detail');
+  loadLeasings();
+  loadDashboard();
+}
+
+async function marcarCondicion(condIdx) {
+  if (!walletConnected) {
+    showToast('Conectá tu wallet primero en la sección Blockchain');
+    return;
+  }
+  const favor = confirm('¿Los fondos van al LESSOR (aceptar) o al LESSEE (cancelar)?
+
+Aceptar = fondos al lessor (incumplió)
+Cancelar = fondos al lessee (cumplió)');
+  document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Confirmando en MetaMask...</div>';
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain').eq('id', currentLeaseId).single();
+    const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
+    const tx = await contract.completeCondition(l.lease_id_onchain, condIdx, favor);
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación...</div>';
+    await tx.wait();
+    document.getElementById('ld-blockchain-msg').innerHTML = `<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/${tx.hash}" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>`;
+    showToast('✓ Condición marcada en blockchain');
+    await sbAdmin.from('condiciones_escrow').update({ estado: 'cumplida', favor_lessor: favor, tx_hash: tx.hash, fecha_cumplimiento: new Date().toISOString().split('T')[0] }).eq('contrato_id', currentLeaseId).eq('index_onchain', condIdx);
+    abrirDetalleLease(currentLeaseId);
+  } catch(e) {
+    document.getElementById('ld-blockchain-msg').innerHTML = `<div class="alert alert-error">${e.reason || e.message}</div>`;
+  }
+}
+
+async function ejecutarDisputa() {
+  if (!walletConnected) { showToast('Conectá tu wallet primero'); return; }
+  if (!confirm('¿Iniciar disputa? Los fondos quedarán bloqueados hasta que el árbitro resuelva.')) return;
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain').eq('id', currentLeaseId).single();
+    const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
+    const tx = await contract.raiseDispute(l.lease_id_onchain);
+    await tx.wait();
+    await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', currentLeaseId);
+    showToast('⚠️ Disputa iniciada en blockchain');
+    document.getElementById('ld-blockchain-msg').innerHTML = `<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/${tx.hash}" target="_blank" style="color:var(--yellow)">Ver TX ↗</a></div>`;
+  } catch(e) {
+    document.getElementById('ld-blockchain-msg').innerHTML = `<div class="alert alert-error">${e.reason || e.message}</div>`;
+  }
 }
 
 async function editarEstadoLease() {
@@ -958,7 +1116,7 @@ async function editarEstadoLease() {
   const { error } = await sbAdmin.from('contratos').update({ estado: nuevo }).eq('id', currentLeaseId);
   if (error) { document.getElementById('det-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast(`✓ Estado actualizado a ${nuevo}`);
-  closeModal('modal-detalle-lease');
+  closeModal('modal-lease-detail');
   loadDashboard();
   loadLeasings();
 }
@@ -1310,10 +1468,11 @@ async function loadUsuarios() {
     <td>${rolBadge(u.rol)}</td>
     <td class="mono" style="font-size:12px">${u.created_at ? formatFecha(u.created_at.split('T')[0]) : '—'}</td>
     <td><div class="badge badge-green"><div class="dot"></div>Activo</div></td>
+    <td><div class="badge ${u.activo !== false ? 'badge-green' : 'badge-red'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</div></td>
     <td style="display:flex;gap:6px">
       <button class="btn btn-outline btn-sm" onclick="cambiarRol('${u.id}', '${u.email}', '${u.rol}')">Rol</button>
       <button class="btn btn-outline btn-sm" onclick="reenviarMagicLink('${u.email}', '${u.rol}')" title="Reenviar acceso">📧</button>
-      <button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:none" onclick="eliminarUsuario('${u.id}', '${u.email}')" title="Eliminar">🗑</button>
+      <button class="btn btn-sm" style="background:${u.activo !== false ? 'var(--red-bg)' : 'var(--green-bg)'};color:${u.activo !== false ? 'var(--red)' : 'var(--green)'};border:none" onclick="eliminarUsuario('${u.id}', '${u.email}', ${u.activo !== false})" title="${u.activo !== false ? 'Desactivar' : 'Activar'}">${u.activo !== false ? '🚫' : '✅'}</button>
     </td>
   </tr>`).join('');
 }
@@ -1414,14 +1573,14 @@ async function reenviarMagicLink(email, rol) {
   }
 }
 
-async function eliminarUsuario(id, email) {
-  if (!confirm(`¿Eliminar al usuario ${email}? Esta acción no se puede deshacer.`)) return;
+async function eliminarUsuario(id, email, activo) {
+  const accion = activo ? 'desactivar' : 'activar';
+  if (!confirm(`¿${accion.charAt(0).toUpperCase() + accion.slice(1)} al usuario ${email}?`)) return;
   try {
-    // Eliminar de tabla usuarios
-    const { error } = await sbAdmin.from('usuarios').delete().eq('id', id);
+    const { error } = await sbAdmin.from('usuarios').update({ activo: !activo }).eq('id', id);
     if (error) throw error;
-    await registrarLog('eliminar_usuario', `Eliminó usuario ${email}`);
-    showToast(`✓ Usuario ${email} eliminado`);
+    await registrarLog(accion + '_usuario', `${accion.charAt(0).toUpperCase() + accion.slice(1)}ó usuario ${email}`);
+    showToast(`✓ Usuario ${email} ${activo ? 'desactivado' : 'activado'}`);
     loadUsuarios();
   } catch(e) {
     showToast(`Error: ${e.message}`);
