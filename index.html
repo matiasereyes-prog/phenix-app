@@ -3242,19 +3242,21 @@ async function importarCuotasExcel(input) {
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    // Detectar filas con datos de cuotas (número, fecha, monto, capital, interes, saldo)
+    // Estructura del Excel de Phenix Leasing:
+    // Col A = Ind (#), Col B = Can#, Col C = Fecha, Col D = Importe (cuota)
+    // Col E = Saldo, Col F = Int período (interés), Col G = Amort (amortización)
+    // Fila 0 es header (OC o fila con texto), filas 1-N son cuotas
     const cuotasData = [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      // Buscar filas donde la primera columna sea un número de cuota
+      // Buscar filas donde col A (índice 0) sea un número de cuota >= 1
       const num = parseInt(row[0]);
-      if (!isNaN(num) && num > 0 && num <= 360) {
-        // Intentar parsear fecha y montos
-        const fecha = row[1] ? excelDateToString(row[1]) : null;
-        const monto = parseFloat(row[2] || row[3]) || null;
-        const capital = parseFloat(row[4] || row[6]) || null;  // col D o G
-        const interes = parseFloat(row[5] || row[5]) || null;  // col E o F
-        const saldo = parseFloat(row[6] || row[7]) || null;
+      if (!isNaN(num) && num >= 1 && num <= 360) {
+        const fecha = row[2] ? excelDateToString(row[2]) : null;  // Col C
+        const monto = parseFloat(String(row[3]).replace(/[^0-9.-]/g,'')) || null;  // Col D = Importe/Cuota
+        const saldo = parseFloat(String(row[4]).replace(/[^0-9.-]/g,'')) || null;  // Col E = Saldo
+        const interes = parseFloat(String(row[5]).replace(/[^0-9.-]/g,'')) || null; // Col F = Int período
+        const capital = parseFloat(String(row[6]).replace(/[^0-9.-]/g,'')) || null; // Col G = Amort
 
         if (monto || capital) {
           cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, saldo_restante: saldo });
