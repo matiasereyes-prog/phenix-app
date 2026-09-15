@@ -210,6 +210,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('clientes')">Clientes</button>
         <button class="nav-btn" onclick="showView('leads')">Leads</button>
         <button class="nav-btn" onclick="showView('vehiculos')">Vehículos</button>
+        <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
+        <button class="nav-btn" onclick="showView('logs')">Logs</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -358,6 +360,35 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         </div>
       </div>
     </div>
+
+  <!-- USUARIOS -->
+  <div id="view-usuarios" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Usuarios del sistema</div>
+      <button class="btn btn-dark" onclick="openModal('modal-nuevo-usuario')">+ Nuevo usuario</button>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-usuarios"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div id="view-logs" style="display:none">
+    <div style="margin-bottom:20px;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Log de acciones</div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead>
+          <tbody id="tbody-logs"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   </div>
 </div>
@@ -648,6 +679,62 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   </div>
 </div>
 
+<!-- ══ MODAL: NUEVO USUARIO ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-usuario">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo usuario del sistema</div>
+    <div class="modal-subtitle">Creá un admin, ejecutivo o cliente. Se envía automáticamente el magic link de bienvenida.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="nu-nombre" placeholder="Juan García"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" type="email" id="nu-email" placeholder="juan@email.com"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Rol</label>
+        <select class="form-select" id="nu-rol">
+          <option value="lessee">Cliente (lessee)</option>
+          <option value="ejecutivo">Ejecutivo de ventas</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="nu-tipo">
+          <option value="fisica">Persona física</option>
+          <option value="juridica">Persona jurídica</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Teléfono</label>
+        <input class="form-input" id="nu-telefono" placeholder="+54 11 ..."/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">CUIT / CUIL</label>
+        <input class="form-input" id="nu-cuit" placeholder="20-12345678-9"/>
+      </div>
+    </div>
+    <div style="background:var(--yellow-bg);border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:14px">
+      ⚡ Se enviará un magic link de bienvenida al email ingresado automáticamente.
+    </div>
+    <div id="nu-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-usuario')">Cancelar</button>
+      <button class="btn btn-dark btn-full" id="btn-crear-usuario" onclick="crearUsuario()">
+        <span id="crear-usuario-text">Crear y enviar invitación</span>
+        <div class="spinner" id="crear-usuario-spinner" style="display:none;border-top-color:white"></div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -717,12 +804,31 @@ async function logout() {
 // LOAD APP
 // ══════════════════════════════════════════════════════════════════
 async function loadApp() {
+  // Verificar rol — solo admin y ejecutivo pueden acceder al backend
+  const { data: usuario } = await sb.from('usuarios').select('rol, nombre').eq('email', currentUser.email).single();
+  
+  if (!usuario || !['admin', 'ejecutivo'].includes(usuario.rol)) {
+    await sb.auth.signOut();
+    document.getElementById('login-msg').innerHTML = '<div class="login-error">⛔ No tenés permisos para acceder al backend. Contactá al administrador.</div>';
+    return;
+  }
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   const email = currentUser.email;
-  document.getElementById('user-av').textContent = email.charAt(0).toUpperCase();
-  document.getElementById('user-nm').textContent = email.split('@')[0];
+  document.getElementById('user-av').textContent = (usuario.nombre || email).charAt(0).toUpperCase();
+  document.getElementById('user-nm').textContent = usuario.nombre || email.split('@')[0];
   document.getElementById('dash-fecha').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  
+  // Ocultar tab Usuarios si es ejecutivo (no admin)
+  if (usuario.rol !== 'admin') {
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      if (b.textContent === 'Usuarios') b.style.display = 'none';
+      if (b.textContent === 'Logs') b.style.display = 'none';
+    });
+  }
+
+  await registrarLog('login', `Acceso al backend desde ${email}`);
   await Promise.all([loadDashboard(), loadVehiculos()]);
   window.history.replaceState(null, '', window.location.pathname);
 }
@@ -731,16 +837,18 @@ async function loadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','usuarios','logs'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','usuarios','logs'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
   if (view === 'leads') loadLeads();
   if (view === 'vehiculos') loadVehiculos();
+  if (view === 'usuarios') loadUsuarios();
+  if (view === 'logs') loadLogs();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1132,6 +1240,122 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// USUARIOS DEL SISTEMA
+// ══════════════════════════════════════════════════════════════════
+async function loadUsuarios() {
+  const { data } = await sb.from('usuarios').select('*').order('created_at', { ascending: false });
+  const tbody = document.getElementById('tbody-usuarios');
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin usuarios registrados.</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(u => `<tr>
+    <td class="bold">${u.nombre || '—'}</td>
+    <td class="mono" style="font-size:12px">${u.email}</td>
+    <td>${rolBadge(u.rol)}</td>
+    <td class="mono" style="font-size:12px">${u.created_at ? formatFecha(u.created_at.split('T')[0]) : '—'}</td>
+    <td><div class="badge badge-green"><div class="dot"></div>Activo</div></td>
+    <td>
+      <button class="btn btn-outline btn-sm" onclick="cambiarRol('${u.id}', '${u.email}', '${u.rol}')">Cambiar rol</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function crearUsuario() {
+  const nombre = document.getElementById('nu-nombre').value.trim();
+  const email = document.getElementById('nu-email').value.trim();
+  const rol = document.getElementById('nu-rol').value;
+  const tipo = document.getElementById('nu-tipo').value;
+  const telefono = document.getElementById('nu-telefono').value.trim();
+  const cuit = document.getElementById('nu-cuit').value.trim();
+
+  if (!nombre || !email) {
+    document.getElementById('nu-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>';
+    return;
+  }
+
+  document.getElementById('btn-crear-usuario').disabled = true;
+  document.getElementById('crear-usuario-text').style.display = 'none';
+  document.getElementById('crear-usuario-spinner').style.display = 'inline-block';
+
+  try {
+    // Crear usuario en auth via Admin API (invitación)
+    const { error: authError } = await sb.auth.admin?.inviteUserByEmail(email).catch(() => ({ error: null })) || {};
+    
+    // Insertar en tabla usuarios
+    const { error } = await sb.from('usuarios').upsert({
+      email, nombre, rol, tipo, telefono: telefono || null, cuit: cuit || null
+    }, { onConflict: 'email' });
+
+    if (error) throw error;
+
+    // Enviar magic link de bienvenida
+    await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: rol === 'lessee' ? 'https://portal.phenixleasing.com' : 'https://app.phenixleasing.com/phenix-backend.html' }
+    });
+
+    await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
+    showToast(`✓ Usuario creado y magic link enviado a ${email}`);
+    closeModal('modal-nuevo-usuario');
+    loadUsuarios();
+  } catch(e) {
+    document.getElementById('nu-msg').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  } finally {
+    document.getElementById('btn-crear-usuario').disabled = false;
+    document.getElementById('crear-usuario-text').style.display = 'inline';
+    document.getElementById('crear-usuario-spinner').style.display = 'none';
+  }
+}
+
+async function cambiarRol(id, email, rolActual) {
+  const roles = ['lessee', 'ejecutivo', 'admin'];
+  const nuevo = prompt(`Rol actual: ${rolActual}
+Nuevo rol (${roles.join('/')}):`);
+  if (!nuevo || !roles.includes(nuevo) || nuevo === rolActual) return;
+  const { error } = await sb.from('usuarios').update({ rol: nuevo }).eq('id', id);
+  if (error) { showToast('Error al cambiar el rol'); return; }
+  await registrarLog('cambio_rol', `Cambió rol de ${email}: ${rolActual} → ${nuevo}`);
+  showToast(`✓ Rol de ${email} actualizado a ${nuevo}`);
+  loadUsuarios();
+}
+
+function rolBadge(rol) {
+  const map = { admin: 'badge-red', ejecutivo: 'badge-orange', lessee: 'badge-blue' };
+  const icons = { admin: '🔑', ejecutivo: '💼', lessee: '👤' };
+  return `<div class="badge ${map[rol]||'badge-gray'}">${icons[rol]||''} ${rol}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOG DE ACCIONES
+// ══════════════════════════════════════════════════════════════════
+async function registrarLog(accion, detalle) {
+  if (!currentUser) return;
+  try {
+    await sb.from('logs_acciones').insert({
+      usuario_email: currentUser.email,
+      accion,
+      detalle
+    });
+  } catch(e) { /* silencioso */ }
+}
+
+async function loadLogs() {
+  const { data } = await sb.from('logs_acciones').select('*').order('created_at', { ascending: false }).limit(100);
+  const tbody = document.getElementById('tbody-logs');
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin actividad registrada.</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(l => `<tr>
+    <td class="mono" style="font-size:11px">${l.created_at ? new Date(l.created_at).toLocaleString('es-AR') : '—'}</td>
+    <td class="mono" style="font-size:12px">${l.usuario_email}</td>
+    <td><div class="badge badge-blue">${l.accion}</div></td>
+    <td style="font-size:13px;color:var(--text2)">${l.detalle}</td>
+  </tr>`).join('');
 }
 
 // INIT
