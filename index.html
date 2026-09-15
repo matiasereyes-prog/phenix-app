@@ -744,6 +744,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 const SUPABASE_URL = 'https://xxscdrwkoutlualpveif.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MDkyMTcsImV4cCI6MjEwNDk4NTIxN30.BNM3dg0jFTxjNuhlJPLAjMcGBv1ZbkmLOMm_A9wOk68';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sbAdmin = supabase.createClient(SUPABASE_URL, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTQwOTIxNywiZXhwIjoyMTA0OTg1MjE3fQ.3j1lk_btb_3jHCdqWV5MQN-99qUdn5G8Muo-j6bYLQk', {
+  auth: { autoRefreshToken: false, persistSession: false }
+});
 
 let currentUser = null;
 let allLeasings = [];
@@ -1076,7 +1079,7 @@ async function crearLease() {
 // CLIENTES
 // ══════════════════════════════════════════════════════════════════
 async function loadClientes() {
-  const { data } = await sb.from('usuarios').select('*, contratos(count)').eq('rol','lessee').order('created_at',{ascending:false});
+  const { data } = await sb.from('usuarios').select('*, contratos(count)').in('rol',['lessee']).order('created_at',{ascending:false});
   const tbody = document.getElementById('tbody-clientes');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin clientes registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(c => `<tr>
@@ -1282,21 +1285,40 @@ async function crearUsuario() {
   document.getElementById('crear-usuario-spinner').style.display = 'inline-block';
 
   try {
-    // Crear usuario en auth via Admin API (invitación)
-    const { error: authError } = await sb.auth.admin?.inviteUserByEmail(email).catch(() => ({ error: null })) || {};
+    // 1. Crear usuario en Supabase Auth via Admin API
+    const redirectTo = rol === 'lessee' 
+      ? 'https://portal.phenixleasing.com' 
+      : 'https://app.phenixleasing.com';
     
-    // Insertar en tabla usuarios
-    const { error } = await sb.from('usuarios').upsert({
-      email, nombre, rol, tipo, telefono: telefono || null, cuit: cuit || null
+    const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { nombre, tipo }
+    });
+
+    if (authError && !authError.message.includes('already been registered')) {
+      throw authError;
+    }
+
+    const authId = authData?.user?.id || null;
+
+    // 2. Insertar o actualizar en tabla usuarios
+    const { error: dbError } = await sbAdmin.from('usuarios').upsert({
+      auth_id: authId,
+      email, nombre, rol, tipo,
+      telefono: telefono || null,
+      cuit: cuit || null
     }, { onConflict: 'email' });
 
-    if (error) throw error;
+    if (dbError) throw dbError;
 
-    // Enviar magic link de bienvenida
-    await sb.auth.signInWithOtp({
+    // 3. Enviar magic link de bienvenida
+    const { error: otpError } = await sb.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: rol === 'lessee' ? 'https://portal.phenixleasing.com' : 'https://app.phenixleasing.com/phenix-backend.html' }
+      options: { emailRedirectTo: redirectTo }
     });
+
+    if (otpError) throw otpError;
 
     await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
     showToast(`✓ Usuario creado y magic link enviado a ${email}`);
