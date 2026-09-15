@@ -1080,7 +1080,7 @@ async function crearLease() {
 // CLIENTES
 // ══════════════════════════════════════════════════════════════════
 async function loadClientes() {
-  const { data } = await sbAdmin.from('usuarios').select('*, contratos(count)').in('rol',['lessee']).order('created_at',{ascending:false});
+  const { data } = await sbAdmin.from('usuarios').select('*, contratos!contratos_usuario_id_fkey(count)').in('rol',['lessee']).order('created_at',{ascending:false});
   const tbody = document.getElementById('tbody-clientes');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin clientes registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(c => `<tr>
