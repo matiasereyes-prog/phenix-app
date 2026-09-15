@@ -864,7 +864,7 @@ async function loadDashboard() {
     sb.from('usuarios').select('*', { count:'exact', head:true }).eq('rol','lessee'),
     sb.from('leads').select('*', { count:'exact', head:true }).eq('estado','nuevo'),
     sb.from('cuotas').select('*', { count:'exact', head:true }).eq('estado','vencida'),
-    sb.from('contratos').select('*, usuarios(nombre,email), vehiculos(marca,modelo,anio)').order('created_at',{ascending:false}).limit(5)
+    sb.from('contratos').select('*, usuarios!contratos_usuario_id_fkey(nombre,email), vehiculos(marca,modelo,anio)').order('created_at',{ascending:false}).limit(5)
   ]);
   document.getElementById('kpi-activos').textContent = activos || 0;
   document.getElementById('kpi-clientes').textContent = clientes || 0;
@@ -878,7 +878,7 @@ async function loadDashboard() {
 // ══════════════════════════════════════════════════════════════════
 async function loadLeasings() {
   const { data } = await sbAdmin.from('contratos')
-    .select('*, usuarios(nombre,email), vehiculos(marca,modelo,anio)')
+    .select('*, usuarios!contratos_usuario_id_fkey(nombre,email), vehiculos(marca,modelo,anio)')
     .order('created_at', { ascending: false });
   allLeasings = data || [];
   renderLeasingsTable('tbody-leasings', allLeasings, false);
@@ -919,7 +919,7 @@ function renderLeasingsTable(tbodyId, data, compact) {
 async function abrirDetalleLease(id) {
   currentLeaseId = id;
   const { data: l } = await sbAdmin.from('contratos')
-    .select('*, usuarios(nombre,email,telefono), vehiculos(marca,modelo,anio,vin,patente)')
+    .select('*, usuarios!contratos_usuario_id_fkey(nombre,email,telefono), vehiculos(marca,modelo,anio,vin,patente)')
     .eq('id', id).single();
   const { data: cuotas } = await sbAdmin.from('cuotas').select('estado').eq('contrato_id', id);
   const pagas = (cuotas||[]).filter(c=>c.estado==='paga').length;
