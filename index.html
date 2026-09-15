@@ -331,7 +331,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-leads" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Leads</div>
-        <button class="btn btn-outline" onclick="exportarExcel('leads')">⬇ Excel</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportarExcel('leads')">⬇ Excel</button>
+          <button class="btn btn-dark" onclick="openModal('modal-nuevo-lead')">+ Nuevo lead</button>
+        </div>
       </div>
       <div id="leads-stats-container" style="margin-bottom:20px"></div>
       <div class="search-bar">
@@ -954,6 +957,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           </label>
           <button class="btn btn-outline btn-sm" onclick="abrirAgregarAdicional()">+ Adicional</button>
           <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="openModal('modal-subir-doc')">📎 Doc</button>
         </div>
       </div>
       <div id="import-excel-msg" style="margin-bottom:8px"></div>
@@ -964,7 +968,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
               <th>#</th>
               <th>Vencimiento</th>
               <th>Cuota</th>
-              <th>Capital</th>
+              <th>Amortización</th>
               <th>Interés</th>
               <th>Seguro</th>
               <th>Adicionales</th>
@@ -993,6 +997,87 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     </div>
 
     <div id="ld-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: MARCAR CUOTA PAGA ═══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-marcar-paga">
+  <div class="modal-card" style="max-width:480px">
+    <div class="modal-title">Marcar cuota como paga</div>
+    <input type="hidden" id="mp-cuota-id"/>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fecha de pago</label>
+        <input class="form-input" type="date" id="mp-fecha"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Medio de pago</label>
+        <select class="form-select" id="mp-medio">
+          <option value="transferencia">Transferencia</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="crypto">Crypto / USDC</option>
+          <option value="debito">Débito automático</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Referencia / Comprobante</label>
+      <input class="form-input" id="mp-referencia" placeholder="N° de transferencia, TX hash..."/>
+    </div>
+    <div id="mp-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-marcar-paga')">Cancelar</button>
+      <button class="btn btn-dark" onclick="confirmarPagoCuota()">✓ Confirmar pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: SUBIR DOCUMENTO ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-subir-doc">
+  <div class="modal-card" style="max-width:500px">
+    <div class="modal-title">Subir documento</div>
+    <div class="modal-subtitle">Asociá el documento al cliente, contrato o cuota.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tipo de documento</label>
+        <select class="form-select" id="sd-tipo">
+          <option value="contrato">Contrato firmado</option>
+          <option value="dni">DNI del cliente</option>
+          <option value="recibo_sueldo">Recibo de sueldo</option>
+          <option value="afip">Constancia AFIP</option>
+          <option value="seguro">Póliza de seguro</option>
+          <option value="comprobante_pago">Comprobante de pago</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Asociar a</label>
+        <select class="form-select" id="sd-asociar">
+          <option value="contrato">Este contrato</option>
+          <option value="cliente">Cliente</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Archivo</label>
+      <div style="border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer" onclick="document.getElementById('sd-file').click()">
+        <div style="font-size:24px;margin-bottom:6px">📎</div>
+        <div style="font-size:13px;color:var(--text2)">Click para seleccionar archivo</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">PDF, JPG, PNG — máx. 10MB</div>
+        <input type="file" id="sd-file" style="display:none" accept=".pdf,.jpg,.jpeg,.png"/>
+      </div>
+      <div id="sd-filename" style="font-size:12px;color:var(--text2);margin-top:6px"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones</label>
+      <input class="form-input" id="sd-observaciones" placeholder="Notas sobre el documento..."/>
+    </div>
+    <div id="sd-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-subir-doc')">Cancelar</button>
+      <button class="btn btn-dark" id="btn-subir-doc" onclick="subirDocumentoBackend()">Subir documento</button>
+    </div>
   </div>
 </div>
 
@@ -1125,6 +1210,86 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-nuevo-seguro')">Cancelar</button>
       <button class="btn btn-dark" onclick="crearSeguro()">Guardar póliza</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: NUEVO LEAD ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-lead">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo lead</div>
+    <div class="modal-subtitle">Registrá un prospecto nuevo en el pipeline.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="nl2-nombre" placeholder="Juan García"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" type="email" id="nl2-email" placeholder="juan@email.com"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Teléfono</label>
+        <input class="form-input" id="nl2-telefono" placeholder="+54 11 ..."/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Auto de interés</label>
+        <input class="form-input" id="nl2-auto" placeholder="Toyota GR86, Ford Ranger..."/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Monto estimado</label>
+        <select class="form-select" id="nl2-monto">
+          <option value="">— Sin especificar —</option>
+          <option value="Hasta USD 20.000">Hasta USD 20.000</option>
+          <option value="USD 20.000 – 30.000">USD 20.000 – 30.000</option>
+          <option value="USD 30.000 – 50.000">USD 30.000 – 50.000</option>
+          <option value="Más de USD 50.000">Más de USD 50.000</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Red de origen</label>
+        <select class="form-select" id="nl2-red">
+          <option value="instagram">Instagram</option>
+          <option value="facebook">Facebook</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="referido">Referido</option>
+          <option value="directo">Directo</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Campaña / Anuncio</label>
+        <input class="form-input" id="nl2-campana" placeholder="Reel leasing pickup Sep 2026"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Responsable</label>
+        <input class="form-input" id="nl2-responsable" placeholder="Nombre del ejecutivo"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Próxima acción</label>
+        <input class="form-input" id="nl2-proxima-accion" placeholder="Llamar para presentar propuesta..."/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha próximo contacto</label>
+        <input class="form-input" type="date" id="nl2-fecha-contacto"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones</label>
+      <input class="form-input" id="nl2-observaciones" placeholder="Notas internas..."/>
+    </div>
+    <div id="nl2-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-lead')">Cancelar</button>
+      <button class="btn btn-dark" onclick="crearLead()">Crear lead</button>
     </div>
   </div>
 </div>
@@ -1530,7 +1695,7 @@ async function loadLiquidacion() {
     html += '<td class="mono">' + String(c.numero).padStart(2,'0') + '</td>';
     html += '<td class="mono">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
     html += '<td class="bold">' + Number(c.monto||0).toLocaleString('es-AR') + '</td>';
-    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? Number(c.capital).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? Number(c.capital).toLocaleString('es-AR') : '—') + '</td>'; // Amortizacion
     html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
     html += '<td class="mono" style="color:var(--green)">' + (c.seguro ? Number(c.seguro).toLocaleString('es-AR') : '—') + '</td>';
     html += '<td class="mono" style="color:var(--yellow)">' + (c.adicionales_monto ? Number(c.adicionales_monto).toLocaleString('es-AR') : '—') + '</td>';
@@ -1539,7 +1704,7 @@ async function loadLiquidacion() {
     html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '">' + c.estado + '</div></td>';
     html += '</tr>';
     if (c.estado === 'paga' && c.fecha_pago) {
-      html += '<tr style="background:#f0fdf4"><td colspan="10" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
+      html += '<tr style="background:#f0fdf4"><td colspan="11" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
     }
   });
   tbody.innerHTML = html;
@@ -1554,7 +1719,7 @@ async function exportarLiquidacion() {
     'N° Cuota': c.numero,
     'Vencimiento': c.fecha_vencimiento || '—',
     'Cuota (USD)': c.monto,
-    'Capital (USD)': c.capital || '—',
+    'Amortización (USD)': c.capital || '—',
     'Interés (USD)': c.interes || '—',
     'IVA (USD)': c.iva || '—',
     'Saldo (USD)': c.saldo_restante || '—',
@@ -3125,6 +3290,149 @@ async function guardarAdicional() {
   closeModal('modal-nuevo-adicional');
   loadLiquidacion();
   await registrarLog('agregar_adicional', 'Agregó ' + tipo + ' de $' + monto + ' a cuota #' + numCuota);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CREAR LEAD DESDE BACKEND
+// ══════════════════════════════════════════════════════════════════
+async function crearLead() {
+  const nombre = document.getElementById('nl2-nombre').value.trim();
+  const email = document.getElementById('nl2-email').value.trim();
+  const telefono = document.getElementById('nl2-telefono').value.trim();
+  const auto_interes = document.getElementById('nl2-auto').value.trim();
+  const monto_estimado = document.getElementById('nl2-monto').value;
+  const red_origen = document.getElementById('nl2-red').value;
+  const campana = document.getElementById('nl2-campana').value.trim();
+  const responsable = document.getElementById('nl2-responsable').value.trim();
+  const proxima_accion = document.getElementById('nl2-proxima-accion').value.trim();
+  const fecha_proxima_accion = document.getElementById('nl2-fecha-contacto').value || null;
+  const observaciones = document.getElementById('nl2-observaciones').value.trim();
+
+  if (!nombre || !email) {
+    document.getElementById('nl2-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>';
+    return;
+  }
+
+  const { error } = await sbAdmin.from('leads').insert({
+    nombre, email, telefono: telefono||null, auto_interes: auto_interes||null,
+    monto_estimado: monto_estimado||null, canal: red_origen, red_origen,
+    campana: campana||null, responsable: responsable||null,
+    proxima_accion: proxima_accion||null, fecha_proxima_accion,
+    observaciones: observaciones||null, estado: 'nuevo'
+  });
+
+  if (error) {
+    document.getElementById('nl2-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  showToast('Nuevo lead creado');
+  closeModal('modal-nuevo-lead');
+  await registrarLog('crear_lead', 'Creo lead ' + email);
+  loadLeads();
+  loadLeadsStats();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MARCAR CUOTA COMO PAGA
+// ══════════════════════════════════════════════════════════════════
+function abrirMarcarPaga(cuotaId, numero) {
+  document.getElementById('mp-cuota-id').value = cuotaId;
+  document.getElementById('mp-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('mp-medio').value = 'transferencia';
+  document.getElementById('mp-referencia').value = '';
+  document.getElementById('mp-msg').innerHTML = '';
+  document.querySelector('#modal-marcar-paga .modal-title').textContent = 'Marcar cuota #' + String(numero).padStart(2,'0') + ' como paga';
+  openModal('modal-marcar-paga');
+}
+
+async function confirmarPagoCuota() {
+  const cuotaId = document.getElementById('mp-cuota-id').value;
+  const fecha_pago = document.getElementById('mp-fecha').value;
+  const medio_pago = document.getElementById('mp-medio').value;
+  const referencia = document.getElementById('mp-referencia').value.trim();
+
+  if (!fecha_pago) {
+    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">Ingresa la fecha de pago.</div>';
+    return;
+  }
+
+  const { error } = await sbAdmin.from('cuotas').update({
+    estado: 'paga', fecha_pago, medio_pago,
+    tx_hash: referencia || null
+  }).eq('id', cuotaId);
+
+  if (error) {
+    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  showToast('Cuota marcada como paga');
+  closeModal('modal-marcar-paga');
+  await registrarLog('marcar_paga', 'Marco cuota ' + cuotaId + ' como paga (' + medio_pago + ')');
+  loadLiquidacion();
+  loadDashboard();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SUBIR DOCUMENTO DESDE BACKEND
+// ══════════════════════════════════════════════════════════════════
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'sd-file') {
+    const file = e.target.files[0];
+    if (file) document.getElementById('sd-filename').textContent = file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)';
+  }
+});
+
+async function subirDocumentoBackend() {
+  const file = document.getElementById('sd-file').files[0];
+  const tipo = document.getElementById('sd-tipo').value;
+  const asociar = document.getElementById('sd-asociar').value;
+  const observaciones = document.getElementById('sd-observaciones').value.trim();
+
+  if (!file) {
+    document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">Selecciona un archivo.</div>';
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">El archivo supera los 10MB.</div>';
+    return;
+  }
+
+  document.getElementById('btn-subir-doc').disabled = true;
+  document.getElementById('sd-msg').innerHTML = '<div class="alert alert-warning">Subiendo archivo...</div>';
+
+  try {
+    const { data: lease } = await sbAdmin.from('contratos').select('usuario_id').eq('id', currentLeaseId).single();
+    const ext = file.name.split('.').pop();
+    const path = lease.usuario_id + '/' + tipo + '_' + Date.now() + '.' + ext;
+
+    const { error: uploadError } = await sbAdmin.storage.from('documentos').upload(path, file);
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = sbAdmin.storage.from('documentos').getPublicUrl(path);
+
+    const { error: dbError } = await sbAdmin.from('documentos').insert({
+      usuario_id: lease.usuario_id,
+      contrato_id: asociar === 'contrato' ? currentLeaseId : null,
+      tipo, url_storage: publicUrl,
+      observacion: observaciones || null,
+      estado: 'aprobado'
+    });
+
+    if (dbError) throw dbError;
+
+    showToast('Documento subido correctamente');
+    closeModal('modal-subir-doc');
+    document.getElementById('sd-file').value = '';
+    document.getElementById('sd-filename').textContent = '';
+    await registrarLog('subir_documento', 'Subio ' + tipo + ' al contrato ' + currentLeaseId);
+
+  } catch(e) {
+    document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">Error: ' + (e.message || 'No se pudo subir.') + '</div>';
+  } finally {
+    document.getElementById('btn-subir-doc').disabled = false;
+  }
 }
 
 // INIT
