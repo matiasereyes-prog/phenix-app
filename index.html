@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phenix Leasing · Backend</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --black:#0a0a0a;--white:#ffffff;--orange:#f05a28;--orange-light:#fff3ee;
+  --gray:#f5f5f3;--gray2:#e8e8e4;--border:#e0ddd8;
+  --text2:#555555;--text3:#999999;
+  --green:#00a651;--green-bg:#e8f7ee;
+  --yellow:#f59e0b;--yellow-bg:#fff8e7;
+  --red:#e53e3e;--red-bg:#fff5f5;
+  --blue:#3366ff;--blue-bg:#eef2ff;
+  --sans:'DM Sans',sans-serif;
+  --display:'Space Grotesk',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --radius:14px;--radius-sm:8px;
+  --shadow:0 2px 12px rgba(0,0,0,0.06);
+  --shadow-lg:0 8px 40px rgba(0,0,0,0.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--gray);color:var(--black);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* ── LOGIN ── */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--black)}
+.login-card{width:100%;max-width:400px;background:var(--white);border-radius:24px;padding:40px;box-shadow:var(--shadow-lg)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px}
+.login-logo-icon{width:38px;height:38px;background:var(--orange);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.login-logo-text{font-family:var(--display);font-size:20px;font-weight:700;color:var(--black)}
+.login-title{font-family:var(--display);font-size:26px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px}
+.login-subtitle{font-size:14px;color:var(--text2);margin-bottom:28px}
+.field-label{display:block;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
+.field-input{width:100%;background:var(--gray);border:2px solid transparent;border-radius:var(--radius-sm);padding:12px 16px;font-family:var(--sans);font-size:14px;color:var(--black);outline:none;transition:border-color 0.2s}
+.field-input:focus{border-color:var(--black);background:var(--white)}
+.field-input::placeholder{color:var(--text3)}
+.field-group{margin-bottom:16px}
+.btn-black{width:100%;padding:14px;background:var(--black);color:white;border:none;border-radius:var(--radius-sm);font-family:var(--display);font-size:15px;font-weight:700;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
+.btn-black:hover:not(:disabled){background:#333;transform:translateY(-1px)}
+.btn-black:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.login-error{background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--radius-sm);padding:10px 14px;color:var(--red);font-size:13px;margin-top:12px;font-weight:500}
+
+/* ── SHELL ── */
+#app-screen{display:none;min-height:100vh}
+.topbar{position:sticky;top:0;z-index:100;background:var(--white);border-bottom:1px solid var(--border);height:60px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow)}
+.topbar-logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-size:18px;font-weight:700;color:var(--black)}
+.topbar-logo-icon{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.topbar-nav{display:flex;gap:2px}
+.nav-btn{padding:7px 14px;border:none;border-radius:var(--radius-sm);background:transparent;color:var(--text2);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.nav-btn:hover{background:var(--gray);color:var(--black)}
+.nav-btn.active{background:var(--black);color:white}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.user-pill{display:flex;align-items:center;gap:8px;background:var(--gray);border-radius:30px;padding:5px 14px 5px 5px}
+.user-avatar{width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white}
+.user-name{font-size:13px;font-weight:600;color:var(--text2)}
+.btn-logout{background:transparent;border:1.5px solid var(--border);color:var(--text3);border-radius:var(--radius-sm);padding:6px 14px;font-size:13px;font-family:var(--sans);font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-logout:hover{color:var(--red);border-color:#fca5a5}
+
+.main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:0.4px}
+.badge-green{background:var(--green-bg);color:var(--green)}
+.badge-yellow{background:var(--yellow-bg);color:#92400e}
+.badge-red{background:var(--red-bg);color:var(--red)}
+.badge-blue{background:var(--blue-bg);color:var(--blue)}
+.badge-gray{background:#f3f4f6;color:#6b7280}
+.badge-orange{background:var(--orange-light);color:var(--orange)}
+.dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ── CARDS & TABLES ── */
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin-bottom:20px}
+.card-header{padding:16px 22px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-family:var(--display);font-size:15px;font-weight:700;color:var(--black)}
+.card-body{padding:22px}
+.data-table{width:100%;border-collapse:collapse}
+.data-table th{text-align:left;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;padding:10px 14px;border-bottom:1.5px solid var(--border);background:var(--gray);white-space:nowrap}
+.data-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tbody tr{cursor:pointer;transition:background 0.1s}
+.data-table tbody tr:hover td{background:#fafaf8}
+.mono{font-family:var(--mono);font-size:12px;font-weight:500}
+.bold{font-weight:700;color:var(--black)}
+
+/* ── BUTTONS ── */
+.btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+.btn-dark{background:var(--black);color:white}
+.btn-dark:hover{background:#333}
+.btn-orange{background:var(--orange);color:white}
+.btn-orange:hover{background:#d94e21}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--border);color:var(--black);background:var(--gray)}
+.btn-green{background:var(--green);color:white}
+.btn-green:hover{background:#009148}
+.btn-red{background:var(--red);color:white}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-full{width:100%;justify-content:center;padding:13px}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay.show{opacity:1;pointer-events:all}
+.modal-card{background:white;border-radius:20px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.2);transform:translateY(20px);transition:transform 0.2s}
+.modal-overlay.show .modal-card{transform:translateY(0)}
+.modal-title{font-family:var(--display);font-size:22px;font-weight:700;color:var(--black);margin-bottom:6px;letter-spacing:-0.3px}
+.modal-subtitle{font-size:14px;color:var(--text2);margin-bottom:24px}
+.modal-footer{display:flex;gap:10px;margin-top:24px}
+.modal-footer .btn{flex:1;justify-content:center;padding:13px;font-size:14px}
+
+/* ── FORM ── */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
+.form-input{width:100%;background:var(--gray);border:1.5px solid transparent;border-radius:var(--radius-sm);padding:10px 14px;color:var(--black);font-family:var(--sans);font-size:14px;outline:none;transition:all 0.2s}
+.form-input:focus{border-color:var(--black);background:var(--white)}
+.form-input::placeholder{color:var(--text3)}
+.form-select{width:100%;background:var(--gray);border:1.5px solid transparent;border-radius:var(--radius-sm);padding:10px 14px;color:var(--black);font-family:var(--sans);font-size:14px;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b6b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+.form-select:focus{border-color:var(--black);background-color:var(--white)}
+.form-divider{border:none;border-top:1.5px solid var(--border);margin:20px 0}
+.form-section{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px}
+
+/* ── KPI ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+.kpi-card.dark{background:var(--black)}
+.kpi-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px}
+.kpi-card.dark .kpi-label{color:rgba(255,255,255,0.4)}
+.kpi-value{font-family:var(--display);font-size:28px;font-weight:700;color:var(--black);letter-spacing:-1px;line-height:1}
+.kpi-card.dark .kpi-value{color:white}
+.kpi-sub{font-size:12px;color:var(--text3);margin-top:6px}
+.kpi-card.dark .kpi-sub{color:rgba(255,255,255,0.3)}
+
+/* ── DETAIL ── */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.detail-key{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+.detail-val{font-size:14px;font-weight:600;color:var(--black)}
+.progress-bar{width:100%;height:8px;background:var(--gray2);border-radius:4px;overflow:hidden;margin:4px 0}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--green));border-radius:4px;transition:width 0.5s}
+
+/* ── ALERT ── */
+.alert{border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;font-weight:500;margin-bottom:14px}
+.alert-error{background:var(--red-bg);border:1px solid #fecaca;color:var(--red)}
+.alert-success{background:var(--green-bg);border:1px solid #a7f3d0;color:var(--green)}
+.alert-warning{background:var(--yellow-bg);border:1px solid #fde68a;color:#92400e}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--black);color:white;border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,0.2);z-index:9999;display:none;animation:slideUp 0.3s ease}
+.toast.show{display:block}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:48px 24px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:12px;opacity:0.4}
+.empty-text{font-size:14px;font-weight:500;line-height:1.6}
+
+/* ── SEARCH ── */
+.search-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.search-input{flex:1;min-width:200px;background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;font-family:var(--sans);font-size:13px;color:var(--black);outline:none}
+.search-input:focus{border-color:var(--black)}
+.filter-select{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;font-family:var(--sans);font-size:13px;color:var(--black);outline:none;cursor:pointer}
+
+@media(max-width:768px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .form-row{grid-template-columns:1fr}
+  .detail-grid{grid-template-columns:1fr}
+  .topbar-nav{display:none}
+  .main{padding:16px 16px 60px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🔥</div>
+      <div class="login-logo-text">Phenix Leasing</div>
+    </div>
+    <div class="login-title">Backend</div>
+    <div class="login-subtitle">Ingresá con tu email para acceder al sistema.</div>
+    <div class="field-group">
+      <label class="field-label">Email</label>
+      <input class="field-input" type="email" id="login-email" placeholder="tu@email.com"/>
+    </div>
+    <button class="btn-black" id="btn-login" onclick="sendMagicLink()">
+      <span id="login-text">Enviar link de acceso</span>
+      <div class="spinner" id="login-spinner" style="display:none"></div>
+    </button>
+    <div id="login-msg"></div>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════════════════════════ -->
+<div id="app-screen">
+  <nav class="topbar">
+    <div style="display:flex;align-items:center;gap:20px">
+      <div class="topbar-logo">
+        <div class="topbar-logo-icon">🔥</div>
+        Phenix Backend
+      </div>
+      <div class="topbar-nav">
+        <button class="nav-btn active" onclick="showView('dashboard')">Dashboard</button>
+        <button class="nav-btn" onclick="showView('leasings')">Leasings</button>
+        <button class="nav-btn" onclick="showView('clientes')">Clientes</button>
+        <button class="nav-btn" onclick="showView('leads')">Leads</button>
+        <button class="nav-btn" onclick="showView('vehiculos')">Vehículos</button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="user-pill">
+        <div class="user-avatar" id="user-av">?</div>
+        <span class="user-name" id="user-nm">—</span>
+      </div>
+      <button class="btn-logout" onclick="logout()">Salir</button>
+    </div>
+  </nav>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div id="view-dashboard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Dashboard</div>
+          <div style="font-size:13px;color:var(--text3);margin-top:4px" id="dash-fecha">—</div>
+        </div>
+        <button class="btn btn-orange" onclick="openModal('modal-nuevo-lease')">+ Nuevo leasing</button>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card dark">
+          <div class="kpi-label">Leasings activos</div>
+          <div class="kpi-value" id="kpi-activos">—</div>
+          <div class="kpi-sub">contratos en curso</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Clientes</div>
+          <div class="kpi-value" id="kpi-clientes">—</div>
+          <div class="kpi-sub">usuarios registrados</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Leads nuevos</div>
+          <div class="kpi-value" id="kpi-leads">—</div>
+          <div class="kpi-sub">sin contactar</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cuotas vencidas</div>
+          <div class="kpi-value" id="kpi-vencidas" style="color:var(--red)">—</div>
+          <div class="kpi-sub">requieren atención</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Últimos leasings</div>
+          <button class="btn btn-outline btn-sm" onclick="showView('leasings')">Ver todos →</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Cliente</th><th>Vehículo</th><th>Tipo</th><th>Canon</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tbody-dash"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEASINGS -->
+    <div id="view-leasings" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Leasings</div>
+        <button class="btn btn-orange" onclick="openModal('modal-nuevo-lease')">+ Nuevo leasing</button>
+      </div>
+      <div class="search-bar">
+        <input class="search-input" type="text" id="search-leasings" placeholder="Buscar por cliente o vehículo..." oninput="filterLeasings()"/>
+        <select class="filter-select" id="filter-estado" onchange="filterLeasings()">
+          <option value="">Todos los estados</option>
+          <option value="borrador">Borrador</option>
+          <option value="activo">Activo</option>
+          <option value="completado">Completado</option>
+          <option value="cancelado">Cancelado</option>
+          <option value="disputado">Disputado</option>
+        </select>
+        <select class="filter-select" id="filter-tipo" onchange="filterLeasings()">
+          <option value="">Todos los tipos</option>
+          <option value="tradicional">Tradicional</option>
+          <option value="escrow_blockchain">Escrow blockchain</option>
+        </select>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Cliente</th><th>Vehículo</th><th>Tipo</th><th>Moneda</th><th>Canon</th><th>Plazo</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tbody-leasings"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="view-clientes" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Clientes</div>
+        <button class="btn btn-dark" onclick="openModal('modal-nuevo-cliente')">+ Nuevo cliente</button>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Nombre</th><th>Email</th><th>Tipo</th><th>CUIT</th><th>Teléfono</th><th>Wallet</th><th>Leasings</th><th></th></tr></thead>
+            <tbody id="tbody-clientes"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADS -->
+    <div id="view-leads" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Leads</div>
+      </div>
+      <div class="search-bar">
+        <input class="search-input" type="text" id="search-leads" placeholder="Buscar por nombre o email..." oninput="filterLeads()"/>
+        <select class="filter-select" id="filter-lead-estado" onchange="filterLeads()">
+          <option value="">Todos los estados</option>
+          <option value="nuevo">Nuevo</option>
+          <option value="contactado">Contactado</option>
+          <option value="calificado">Calificado</option>
+          <option value="cotizado">Cotizado</option>
+          <option value="convertido">Convertido</option>
+          <option value="rechazado">Rechazado</option>
+        </select>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Auto de interés</th><th>Monto</th><th>Canal</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tbody-leads"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VEHICULOS -->
+    <div id="view-vehiculos" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Vehículos</div>
+        <button class="btn btn-dark" onclick="openModal('modal-nuevo-vehiculo')">+ Nuevo vehículo</button>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Marca</th><th>Modelo</th><th>Año</th><th>VIN</th><th>Patente</th><th>Precio USD</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tbody-vehiculos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ MODAL: NUEVO LEASING ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-lease">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo leasing</div>
+    <div class="modal-subtitle">Cargá los datos del contrato. Se guarda en Supabase y opcionalmente en blockchain.</div>
+
+    <div class="form-section">Tipo de leasing</div>
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select class="form-select" id="nl-tipo" onchange="toggleEscrowFields()">
+        <option value="tradicional">Tradicional (cuotas en ARS/USD)</option>
+        <option value="escrow_blockchain">Escrow blockchain (garantía en cripto)</option>
+      </select>
+    </div>
+
+    <div class="form-divider"></div>
+    <div class="form-section">Cliente</div>
+    <div class="form-group">
+      <label class="form-label">Email del cliente</label>
+      <input class="form-input" type="email" id="nl-cliente-email" placeholder="cliente@email.com" onblur="buscarCliente()"/>
+      <div id="nl-cliente-info" style="margin-top:8px;font-size:13px;color:var(--text2)"></div>
+    </div>
+
+    <div class="form-divider"></div>
+    <div class="form-section">Vehículo</div>
+    <div class="form-group">
+      <label class="form-label">Seleccionar vehículo</label>
+      <select class="form-select" id="nl-vehiculo">
+        <option value="">Cargando vehículos...</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">O ingresar VIN manualmente</label>
+        <input class="form-input" id="nl-vin" placeholder="JF1ZD4HF6P8000001"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descripción del vehículo</label>
+        <input class="form-input" id="nl-desc" placeholder="Toyota GR86 2025 Silver"/>
+      </div>
+    </div>
+
+    <div class="form-divider"></div>
+    <div class="form-section">Condiciones financieras</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Moneda</label>
+        <select class="form-select" id="nl-moneda">
+          <option value="USD">USD</option>
+          <option value="ARS">ARS</option>
+          <option value="USDC">USDC</option>
+          <option value="ETH">ETH</option>
+          <option value="cbBTC">cbBTC</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Canon mensual</label>
+        <input class="form-input" type="number" id="nl-canon" placeholder="850"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Plazo (meses)</label>
+        <input class="form-input" type="number" id="nl-plazo" placeholder="36" value="36"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Opción de compra</label>
+        <input class="form-input" type="number" id="nl-opcion" placeholder="5000"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fecha de inicio</label>
+        <input class="form-input" type="date" id="nl-fecha-inicio"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado inicial</label>
+        <select class="form-select" id="nl-estado">
+          <option value="borrador">Borrador</option>
+          <option value="activo">Activo</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Campos escrow blockchain -->
+    <div id="escrow-fields" style="display:none">
+      <div class="form-divider"></div>
+      <div class="form-section">Escrow blockchain</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Wallet del lessee</label>
+          <input class="form-input" id="nl-wallet-lessee" placeholder="0x..."/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Wallet del árbitro</label>
+          <input class="form-input" id="nl-wallet-arbitro" placeholder="0x..."/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Token del escrow</label>
+          <select class="form-select" id="nl-escrow-token">
+            <option value="USDC">USDC</option>
+            <option value="ETH">ETH</option>
+            <option value="cbBTC">cbBTC</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Monto del escrow</label>
+          <input class="form-input" type="number" id="nl-escrow-monto" placeholder="1000"/>
+        </div>
+      </div>
+    </div>
+
+    <div id="nl-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-lease')">Cancelar</button>
+      <button class="btn btn-orange btn-full" id="btn-crear-lease" onclick="crearLease()">
+        <span id="crear-lease-text">Crear leasing</span>
+        <div class="spinner" id="crear-lease-spinner" style="display:none;border-top-color:white"></div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: NUEVO CLIENTE ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-cliente">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo cliente</div>
+    <div class="modal-subtitle">Cargá los datos del cliente en Supabase.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="nc-nombre" placeholder="Juan García"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="nc-tipo">
+          <option value="fisica">Persona física</option>
+          <option value="juridica">Persona jurídica</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" type="email" id="nc-email" placeholder="juan@email.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teléfono</label>
+        <input class="form-input" id="nc-telefono" placeholder="+54 11 ..."/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">CUIT / CUIL</label>
+        <input class="form-input" id="nc-cuit" placeholder="20-12345678-9"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wallet (opcional)</label>
+        <input class="form-input" id="nc-wallet" placeholder="0x..."/>
+      </div>
+    </div>
+    <div id="nc-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-cliente')">Cancelar</button>
+      <button class="btn btn-dark btn-full" onclick="crearCliente()">Crear cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: NUEVO VEHICULO ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-vehiculo">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo vehículo</div>
+    <div class="modal-subtitle">Cargá el vehículo en el inventario.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Marca</label>
+        <input class="form-input" id="nv-marca" placeholder="Toyota"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Modelo</label>
+        <input class="form-input" id="nv-modelo" placeholder="GR86"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Año</label>
+        <input class="form-input" type="number" id="nv-anio" placeholder="2025"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <input class="form-input" id="nv-color" placeholder="Silver"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">VIN</label>
+        <input class="form-input" id="nv-vin" placeholder="JF1ZD4HF6P8000001"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Patente</label>
+        <input class="form-input" id="nv-patente" placeholder="AB 123 CD"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Precio (USD)</label>
+        <input class="form-input" type="number" id="nv-precio" placeholder="28000"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado</label>
+        <select class="form-select" id="nv-estado">
+          <option value="disponible">Disponible</option>
+          <option value="en_leasing">En leasing</option>
+          <option value="vendido">Vendido</option>
+        </select>
+      </div>
+    </div>
+    <div id="nv-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-vehiculo')">Cancelar</button>
+      <button class="btn btn-dark btn-full" onclick="crearVehiculo()">Agregar vehículo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: DETALLE LEASING ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-detalle-lease">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div class="modal-title" id="det-titulo">Leasing</div>
+        <div id="det-badge" style="margin-top:6px"></div>
+      </div>
+      <button onclick="closeModal('modal-detalle-lease')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
+    </div>
+    <div class="detail-grid" id="det-grid"></div>
+    <div style="margin-top:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Progreso cuotas</div>
+      <div class="progress-bar"><div class="progress-fill" id="det-progress" style="width:0%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-top:4px">
+        <span id="det-cuotas-pagas">0 pagas</span>
+        <span id="det-cuotas-total">de 36</span>
+      </div>
+    </div>
+    <div class="modal-footer" style="margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal('modal-detalle-lease')">Cerrar</button>
+      <button class="btn btn-dark" onclick="editarEstadoLease()" id="btn-editar-estado">Cambiar estado</button>
+    </div>
+    <div id="det-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: DETALLE LEAD ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-detalle-lead">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div class="modal-title" id="lead-titulo">Lead</div>
+      <button onclick="closeModal('modal-detalle-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
+    </div>
+    <div class="detail-grid" id="lead-grid"></div>
+    <div class="form-group" style="margin-top:16px">
+      <label class="form-label">Cambiar estado</label>
+      <select class="form-select" id="lead-nuevo-estado">
+        <option value="nuevo">Nuevo</option>
+        <option value="contactado">Contactado</option>
+        <option value="calificado">Calificado</option>
+        <option value="cotizado">Cotizado</option>
+        <option value="convertido">Convertido</option>
+        <option value="rechazado">Rechazado</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones</label>
+      <input class="form-input" id="lead-observaciones" placeholder="Notas internas..."/>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-detalle-lead')">Cerrar</button>
+      <button class="btn btn-dark" onclick="actualizarLead()">Guardar cambios</button>
+    </div>
+    <div id="lead-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// CONFIG SUPABASE
+// ══════════════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://xxscdrwkoutlualpveif.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MDkyMTcsImV4cCI6MjEwNDk4NTIxN30.BNM3dg0jFTxjNuhlJPLAjMcGBv1ZbkmLOMm_A9wOk68';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let allLeasings = [];
+let allLeads = [];
+let currentLeaseId = null;
+let currentLeadId = null;
+
+// ══════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════
+async function sendMagicLink() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) return;
+  document.getElementById('btn-login').disabled = true;
+  document.getElementById('login-text').style.display = 'none';
+  document.getElementById('login-spinner').style.display = 'inline-block';
+  try {
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href }
+    });
+    if (error) throw error;
+    document.getElementById('login-msg').innerHTML = `<div class="alert alert-success" style="margin-top:12px">✓ Link enviado a <strong>${email}</strong>. Revisá tu correo.</div>`;
+  } catch(e) {
+    document.getElementById('login-msg').innerHTML = `<div class="login-error">${e.message}</div>`;
+  } finally {
+    document.getElementById('btn-login').disabled = false;
+    document.getElementById('login-text').style.display = 'inline';
+    document.getElementById('login-spinner').style.display = 'none';
+  }
+}
+
+document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') sendMagicLink(); });
+
+async function checkSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    loadApp();
+  }
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session && !currentUser) { currentUser = session.user; loadApp(); }
+    if (!session) { currentUser = null; showLogin(); }
+  });
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  showLogin();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOAD APP
+// ══════════════════════════════════════════════════════════════════
+async function loadApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  const email = currentUser.email;
+  document.getElementById('user-av').textContent = email.charAt(0).toUpperCase();
+  document.getElementById('user-nm').textContent = email.split('@')[0];
+  document.getElementById('dash-fecha').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  await Promise.all([loadDashboard(), loadVehiculos()]);
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VIEWS
+// ══════════════════════════════════════════════════════════════════
+function showView(view) {
+  ['dashboard','leasings','clientes','leads','vehiculos'].forEach(v => {
+    document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos'][i] === view);
+  });
+  if (view === 'leasings') loadLeasings();
+  if (view === 'clientes') loadClientes();
+  if (view === 'leads') loadLeads();
+  if (view === 'vehiculos') loadVehiculos();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  const [{ count: activos }, { count: clientes }, { count: leads }, { count: vencidas }, { data: ultimos }] = await Promise.all([
+    sb.from('contratos').select('*', { count:'exact', head:true }).eq('estado','activo'),
+    sb.from('usuarios').select('*', { count:'exact', head:true }).eq('rol','lessee'),
+    sb.from('leads').select('*', { count:'exact', head:true }).eq('estado','nuevo'),
+    sb.from('cuotas').select('*', { count:'exact', head:true }).eq('estado','vencida'),
+    sb.from('contratos').select('*, usuarios(nombre,email), vehiculos(marca,modelo,anio)').order('created_at',{ascending:false}).limit(5)
+  ]);
+  document.getElementById('kpi-activos').textContent = activos || 0;
+  document.getElementById('kpi-clientes').textContent = clientes || 0;
+  document.getElementById('kpi-leads').textContent = leads || 0;
+  document.getElementById('kpi-vencidas').textContent = vencidas || 0;
+  renderLeasingsTable('tbody-dash', ultimos || [], true);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LEASINGS
+// ══════════════════════════════════════════════════════════════════
+async function loadLeasings() {
+  const { data } = await sb.from('contratos')
+    .select('*, usuarios(nombre,email), vehiculos(marca,modelo,anio)')
+    .order('created_at', { ascending: false });
+  allLeasings = data || [];
+  renderLeasingsTable('tbody-leasings', allLeasings, false);
+}
+
+function filterLeasings() {
+  const q = document.getElementById('search-leasings').value.toLowerCase();
+  const estado = document.getElementById('filter-estado').value;
+  const tipo = document.getElementById('filter-tipo').value;
+  const filtered = allLeasings.filter(l => {
+    const matchQ = !q || (l.usuarios?.nombre||'').toLowerCase().includes(q) || (l.vehiculos?.modelo||'').toLowerCase().includes(q);
+    const matchEstado = !estado || l.estado === estado;
+    const matchTipo = !tipo || l.tipo === tipo;
+    return matchQ && matchEstado && matchTipo;
+  });
+  renderLeasingsTable('tbody-leasings', filtered, false);
+}
+
+function renderLeasingsTable(tbodyId, data, compact) {
+  const tbody = document.getElementById(tbodyId);
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin leasings registrados.</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(l => `<tr onclick="abrirDetalleLease('${l.id}')">
+    ${!compact ? `<td class="mono" style="color:var(--text3)">${l.id.slice(0,8)}...</td>` : ''}
+    <td><div class="bold">${l.usuarios?.nombre || '—'}</div><div style="font-size:11px;color:var(--text3)">${l.usuarios?.email || ''}</div></td>
+    <td>${l.vehiculos ? `${l.vehiculos.marca} ${l.vehiculos.modelo} ${l.vehiculos.anio}` : '—'}</td>
+    ${!compact ? `<td><div class="badge ${l.tipo==='escrow_blockchain' ? 'badge-orange' : 'badge-blue'}">${l.tipo==='escrow_blockchain' ? '⛓ Escrow' : '📄 Trad.'}</div></td>` : ''}
+    ${!compact ? `<td class="mono">${l.moneda}</td>` : ''}
+    <td class="bold">${l.moneda} ${Number(l.canon_mensual).toLocaleString('es-AR')}</td>
+    ${!compact ? `<td class="mono">${l.plazo_meses}m</td>` : ''}
+    <td>${estadoBadge(l.estado)}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLease('${l.id}')">Ver →</button></td>
+  </tr>`).join('');
+}
+
+async function abrirDetalleLease(id) {
+  currentLeaseId = id;
+  const { data: l } = await sb.from('contratos')
+    .select('*, usuarios(nombre,email,telefono), vehiculos(marca,modelo,anio,vin,patente)')
+    .eq('id', id).single();
+  const { data: cuotas } = await sb.from('cuotas').select('estado').eq('contrato_id', id);
+  const pagas = (cuotas||[]).filter(c=>c.estado==='paga').length;
+  const total = (cuotas||[]).length;
+
+  document.getElementById('det-titulo').textContent = l.vehiculos ? `${l.vehiculos.marca} ${l.vehiculos.modelo} ${l.vehiculos.anio}` : 'Leasing';
+  document.getElementById('det-badge').innerHTML = estadoBadge(l.estado);
+  document.getElementById('det-progress').style.width = total > 0 ? `${(pagas/total)*100}%` : '0%';
+  document.getElementById('det-cuotas-pagas').textContent = `${pagas} pagas`;
+  document.getElementById('det-cuotas-total').textContent = `de ${total}`;
+
+  document.getElementById('det-grid').innerHTML = [
+    ['Cliente', l.usuarios?.nombre || '—'],
+    ['Email', l.usuarios?.email || '—'],
+    ['Teléfono', l.usuarios?.telefono || '—'],
+    ['Tipo', l.tipo === 'escrow_blockchain' ? '⛓ Escrow blockchain' : '📄 Tradicional'],
+    ['Moneda', l.moneda],
+    ['Canon mensual', `${l.moneda} ${Number(l.canon_mensual).toLocaleString('es-AR')}`],
+    ['Plazo', `${l.plazo_meses} meses`],
+    ['Inicio', l.fecha_inicio ? formatFecha(l.fecha_inicio) : '—'],
+    ['Fin', l.fecha_fin ? formatFecha(l.fecha_fin) : '—'],
+    ['Opción de compra', l.opcion_compra ? `${l.moneda} ${Number(l.opcion_compra).toLocaleString()}` : '—'],
+    ['VIN', l.vehiculos?.vin || '—'],
+    ['Patente', l.vehiculos?.patente || '—'],
+  ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
+
+  openModal('modal-detalle-lease');
+}
+
+async function editarEstadoLease() {
+  const estados = ['borrador','activo','completado','cancelado','disputado'];
+  const { data: l } = await sb.from('contratos').select('estado').eq('id', currentLeaseId).single();
+  const actual = l.estado;
+  const nuevo = prompt(`Estado actual: ${actual}\nNuevo estado (${estados.join('/')}):`, actual);
+  if (!nuevo || !estados.includes(nuevo) || nuevo === actual) return;
+  const { error } = await sb.from('contratos').update({ estado: nuevo }).eq('id', currentLeaseId);
+  if (error) { document.getElementById('det-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  showToast(`✓ Estado actualizado a ${nuevo}`);
+  closeModal('modal-detalle-lease');
+  loadDashboard();
+  loadLeasings();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CREAR LEASING
+// ══════════════════════════════════════════════════════════════════
+function toggleEscrowFields() {
+  const tipo = document.getElementById('nl-tipo').value;
+  document.getElementById('escrow-fields').style.display = tipo === 'escrow_blockchain' ? 'block' : 'none';
+}
+
+async function buscarCliente() {
+  const email = document.getElementById('nl-cliente-email').value.trim();
+  if (!email) return;
+  const { data } = await sb.from('usuarios').select('id,nombre,tipo').eq('email', email).single();
+  const el = document.getElementById('nl-cliente-info');
+  if (data) {
+    el.innerHTML = `<span style="color:var(--green);font-weight:600">✓ ${data.nombre} (${data.tipo})</span>`;
+    el.dataset.userId = data.id;
+  } else {
+    el.innerHTML = `<span style="color:var(--red)">No encontrado — se creará automáticamente</span>`;
+    el.dataset.userId = '';
+  }
+}
+
+async function crearLease() {
+  const tipo = document.getElementById('nl-tipo').value;
+  const email = document.getElementById('nl-cliente-email').value.trim();
+  const vehiculoId = document.getElementById('nl-vehiculo').value;
+  const canon = document.getElementById('nl-canon').value;
+  const plazo = document.getElementById('nl-plazo').value;
+  const moneda = document.getElementById('nl-moneda').value;
+  const estado = document.getElementById('nl-estado').value;
+  const fechaInicio = document.getElementById('nl-fecha-inicio').value;
+  const opcion = document.getElementById('nl-opcion').value;
+
+  if (!email || !canon || !plazo) {
+    document.getElementById('nl-msg').innerHTML = '<div class="alert alert-error">Completá los campos obligatorios.</div>';
+    return;
+  }
+
+  document.getElementById('btn-crear-lease').disabled = true;
+  document.getElementById('crear-lease-text').style.display = 'none';
+  document.getElementById('crear-lease-spinner').style.display = 'inline-block';
+
+  try {
+    // Obtener o crear usuario
+    let { data: usuario } = await sb.from('usuarios').select('id').eq('email', email).single();
+    if (!usuario) {
+      const { data: nuevoUsuario, error } = await sb.from('usuarios').insert({
+        email, nombre: email.split('@')[0], tipo: 'fisica', rol: 'lessee'
+      }).select('id').single();
+      if (error) throw error;
+      usuario = nuevoUsuario;
+    }
+
+    // Calcular fecha fin
+    let fechaFin = null;
+    if (fechaInicio && plazo) {
+      const fin = new Date(fechaInicio);
+      fin.setMonth(fin.getMonth() + parseInt(plazo));
+      fechaFin = fin.toISOString().split('T')[0];
+    }
+
+    // Crear contrato
+    const contratoData = {
+      usuario_id: usuario.id,
+      vehiculo_id: vehiculoId || null,
+      tipo, estado, moneda,
+      canon_mensual: parseFloat(canon),
+      plazo_meses: parseInt(plazo),
+      fecha_inicio: fechaInicio || null,
+      fecha_fin: fechaFin,
+      opcion_compra: opcion ? parseFloat(opcion) : null,
+    };
+
+    if (tipo === 'escrow_blockchain') {
+      contratoData.wallet_lessee = document.getElementById('nl-wallet-lessee').value;
+      contratoData.wallet_arbitro = document.getElementById('nl-wallet-arbitro').value;
+      contratoData.escrow_token = document.getElementById('nl-escrow-token').value;
+      contratoData.escrow_monto = parseFloat(document.getElementById('nl-escrow-monto').value) || 0;
+      contratoData.escrow_bloqueado = contratoData.escrow_monto;
+    }
+
+    const { data: contrato, error: errContrato } = await sb.from('contratos').insert(contratoData).select('id').single();
+    if (errContrato) throw errContrato;
+
+    // Generar cuotas automáticamente
+    if (fechaInicio && plazo && estado === 'activo') {
+      const cuotas = Array.from({ length: parseInt(plazo) }, (_, i) => {
+        const venc = new Date(fechaInicio);
+        venc.setMonth(venc.getMonth() + i + 1);
+        return {
+          contrato_id: contrato.id,
+          numero: i + 1,
+          fecha_vencimiento: venc.toISOString().split('T')[0],
+          monto: parseFloat(canon),
+          estado: 'pendiente'
+        };
+      });
+      await sb.from('cuotas').insert(cuotas);
+    }
+
+    showToast('✓ Leasing creado correctamente');
+    closeModal('modal-nuevo-lease');
+    document.getElementById('nl-msg').innerHTML = '';
+    loadDashboard();
+  } catch(e) {
+    document.getElementById('nl-msg').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  } finally {
+    document.getElementById('btn-crear-lease').disabled = false;
+    document.getElementById('crear-lease-text').style.display = 'inline';
+    document.getElementById('crear-lease-spinner').style.display = 'none';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CLIENTES
+// ══════════════════════════════════════════════════════════════════
+async function loadClientes() {
+  const { data } = await sb.from('usuarios').select('*, contratos(count)').eq('rol','lessee').order('created_at',{ascending:false});
+  const tbody = document.getElementById('tbody-clientes');
+  if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin clientes registrados.</div></div></td></tr>`; return; }
+  tbody.innerHTML = data.map(c => `<tr>
+    <td class="bold">${c.nombre}</td>
+    <td class="mono" style="font-size:12px">${c.email}</td>
+    <td><div class="badge ${c.tipo==='juridica'?'badge-orange':'badge-blue'}">${c.tipo==='juridica'?'Empresa':'Persona'}</div></td>
+    <td class="mono">${c.cuit||'—'}</td>
+    <td>${c.telefono||'—'}</td>
+    <td class="mono" style="font-size:11px">${c.wallet_address ? c.wallet_address.slice(0,8)+'...' : '—'}</td>
+    <td class="mono">${c.contratos?.[0]?.count || 0}</td>
+    <td><button class="btn btn-outline btn-sm">Ver →</button></td>
+  </tr>`).join('');
+}
+
+async function crearCliente() {
+  const nombre = document.getElementById('nc-nombre').value.trim();
+  const email = document.getElementById('nc-email').value.trim();
+  const tipo = document.getElementById('nc-tipo').value;
+  const telefono = document.getElementById('nc-telefono').value.trim();
+  const cuit = document.getElementById('nc-cuit').value.trim();
+  const wallet = document.getElementById('nc-wallet').value.trim();
+  if (!nombre || !email) { document.getElementById('nc-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>'; return; }
+  const { error } = await sb.from('usuarios').insert({ nombre, email, tipo, telefono, cuit, wallet_address: wallet || null, rol:'lessee' });
+  if (error) { document.getElementById('nc-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  showToast('✓ Cliente creado');
+  closeModal('modal-nuevo-cliente');
+  loadClientes();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LEADS
+// ══════════════════════════════════════════════════════════════════
+async function loadLeads() {
+  const { data } = await sb.from('leads').select('*').order('created_at',{ascending:false});
+  allLeads = data || [];
+  renderLeadsTable(allLeads);
+}
+
+function filterLeads() {
+  const q = document.getElementById('search-leads').value.toLowerCase();
+  const estado = document.getElementById('filter-lead-estado').value;
+  const filtered = allLeads.filter(l => {
+    const matchQ = !q || l.nombre.toLowerCase().includes(q) || l.email.toLowerCase().includes(q);
+    const matchEstado = !estado || l.estado === estado;
+    return matchQ && matchEstado;
+  });
+  renderLeadsTable(filtered);
+}
+
+function renderLeadsTable(data) {
+  const tbody = document.getElementById('tbody-leads');
+  if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📬</div><div class="empty-text">Sin leads registrados.</div></div></td></tr>`; return; }
+  tbody.innerHTML = data.map(l => `<tr onclick="abrirDetalleLead('${l.id}')">
+    <td class="bold">${l.nombre}</td>
+    <td class="mono" style="font-size:12px">${l.email}</td>
+    <td>${l.telefono||'—'}</td>
+    <td>${l.auto_interes||'—'}</td>
+    <td>${l.monto_estimado||'—'}</td>
+    <td><div class="badge badge-blue">${l.canal||'landing'}</div></td>
+    <td>${leadBadge(l.estado)}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLead('${l.id}')">Gestionar →</button></td>
+  </tr>`).join('');
+}
+
+function abrirDetalleLead(id) {
+  currentLeadId = id;
+  const l = allLeads.find(x => x.id === id);
+  document.getElementById('lead-titulo').textContent = l.nombre;
+  document.getElementById('lead-nuevo-estado').value = l.estado;
+  document.getElementById('lead-observaciones').value = l.observaciones || '';
+  document.getElementById('lead-grid').innerHTML = [
+    ['Email', l.email], ['Teléfono', l.telefono||'—'],
+    ['Auto de interés', l.auto_interes||'—'], ['Monto estimado', l.monto_estimado||'—'],
+    ['Canal', l.canal||'landing'], ['Fecha', formatFecha(l.created_at?.split('T')[0])],
+  ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
+  openModal('modal-detalle-lead');
+}
+
+async function actualizarLead() {
+  const estado = document.getElementById('lead-nuevo-estado').value;
+  const observaciones = document.getElementById('lead-observaciones').value;
+  const { error } = await sb.from('leads').update({ estado, observaciones }).eq('id', currentLeadId);
+  if (error) { document.getElementById('lead-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  showToast('✓ Lead actualizado');
+  closeModal('modal-detalle-lead');
+  loadLeads();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VEHICULOS
+// ══════════════════════════════════════════════════════════════════
+async function loadVehiculos() {
+  const { data } = await sb.from('vehiculos').select('*').order('created_at',{ascending:false});
+  const tbody = document.getElementById('tbody-vehiculos');
+  if (tbody && data) {
+    if (!data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-text">Sin vehículos registrados.</div></div></td></tr>`; }
+    else {
+      tbody.innerHTML = data.map(v => `<tr>
+        <td class="bold">${v.marca}</td><td>${v.modelo}</td><td class="mono">${v.anio}</td>
+        <td class="mono" style="font-size:11px">${v.vin}</td><td>${v.patente||'—'}</td>
+        <td class="bold">USD ${Number(v.precio_usd).toLocaleString()}</td>
+        <td>${estadoBadge(v.estado)}</td>
+        <td><button class="btn btn-outline btn-sm">Editar</button></td>
+      </tr>`).join('');
+    }
+  }
+  // Poblar select en modal
+  const select = document.getElementById('nl-vehiculo');
+  if (select && data) {
+    select.innerHTML = `<option value="">Sin seleccionar</option>` + data.filter(v=>v.estado==='disponible').map(v => `<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} - ${v.vin}</option>`).join('');
+  }
+}
+
+async function crearVehiculo() {
+  const marca = document.getElementById('nv-marca').value.trim();
+  const modelo = document.getElementById('nv-modelo').value.trim();
+  const anio = document.getElementById('nv-anio').value;
+  const vin = document.getElementById('nv-vin').value.trim();
+  const patente = document.getElementById('nv-patente').value.trim();
+  const precio = document.getElementById('nv-precio').value;
+  const color = document.getElementById('nv-color').value.trim();
+  const estado = document.getElementById('nv-estado').value;
+  if (!marca || !modelo || !vin || !precio) { document.getElementById('nv-msg').innerHTML = '<div class="alert alert-error">Completá los campos obligatorios.</div>'; return; }
+  const { error } = await sb.from('vehiculos').insert({ marca, modelo, anio: parseInt(anio), vin, patente, color, precio_usd: parseFloat(precio), estado });
+  if (error) { document.getElementById('nv-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  showToast('✓ Vehículo agregado');
+  closeModal('modal-nuevo-vehiculo');
+  loadVehiculos();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════════════
+function estadoBadge(estado) {
+  const map = { activo:'badge-green', borrador:'badge-gray', completado:'badge-blue', cancelado:'badge-gray', disputado:'badge-red', disponible:'badge-green', en_leasing:'badge-orange', vendido:'badge-gray' };
+  return `<div class="badge ${map[estado]||'badge-gray'}"><div class="dot"></div>${estado}</div>`;
+}
+
+function leadBadge(estado) {
+  const map = { nuevo:'badge-orange', contactado:'badge-blue', calificado:'badge-yellow', cotizado:'badge-blue', convertido:'badge-green', rechazado:'badge-red' };
+  return `<div class="badge ${map[estado]||'badge-gray'}">${estado}</div>`;
+}
+
+function formatFecha(str) {
+  if (!str) return '—';
+  const [y,m,d] = str.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${d} ${meses[parseInt(m)-1]} ${y}`;
+}
+
+function openModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow='hidden'; }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); document.body.style.overflow=''; }
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) closeModal(el.id); });
+});
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// INIT
+checkSession();
+</script>
+</body>
+</html>
