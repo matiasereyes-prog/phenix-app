@@ -1067,10 +1067,7 @@ async function marcarCondicion(condIdx) {
     showToast('Conectá tu wallet primero en la sección Blockchain');
     return;
   }
-  const favor = confirm('¿Los fondos van al LESSOR (aceptar) o al LESSEE (cancelar)?
-
-Aceptar = fondos al lessor (incumplió)
-Cancelar = fondos al lessee (cumplió)');
+  const favor = confirm('Fondos al LESSOR (Aceptar) o al LESSEE (Cancelar)?\n\nAceptar = fondos al lessor (incumplió)\nCancelar = fondos al lessee (cumplió)');
   document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Confirmando en MetaMask...</div>';
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
@@ -1255,7 +1252,7 @@ async function loadClientes() {
 
 async function abrirDetalleCliente(id) {
   const { data: u } = await sbAdmin.from('usuarios').select('*').eq('id', id).single();
-  const { data: contratos } = await sbAdmin.from('contratos')
+  const { data: cts } = await sbAdmin.from('contratos')
     .select('*, vehiculos(marca,modelo,anio)')
     .eq('usuario_id', id)
     .order('created_at', { ascending: false });
@@ -1263,43 +1260,95 @@ async function abrirDetalleCliente(id) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay show';
   modal.style.zIndex = '2000';
-  modal.innerHTML = `
-    <div class="modal-card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
-        <div>
-          <div class="modal-title">${u.nombre}</div>
-          <div style="margin-top:6px">${u.tipo === 'juridica' ? '<div class="badge badge-orange">Empresa</div>' : '<div class="badge badge-blue">Persona física</div>'}</div>
-        </div>
-        <button onclick="this.closest('.modal-overlay').remove();document.body.style.overflow=''" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
-      </div>
-      <div class="detail-grid">
-        <div><div class="detail-key">Email</div><div class="detail-val">${u.email}</div></div>
-        <div><div class="detail-key">Teléfono</div><div class="detail-val">${u.telefono || '—'}</div></div>
-        <div><div class="detail-key">CUIT</div><div class="detail-val">${u.cuit || '—'}</div></div>
-        <div><div class="detail-key">Wallet</div><div class="detail-val" style="font-family:var(--mono);font-size:12px">${u.wallet_address ? u.wallet_address.slice(0,10)+'...' : '—'}</div></div>
-        <div><div class="detail-key">Rol</div><div class="detail-val">${u.rol}</div></div>
-        <div><div class="detail-key">Registrado</div><div class="detail-val">${u.created_at ? formatFecha(u.created_at.split('T')[0]) : '—'}</div></div>
-      </div>
-      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;margin-top:4px">Contratos (${contratos?.length || 0})</div>
-      ${contratos?.length ? contratos.map(c => `
-        <div style="background:var(--gray);border-radius:10px;padding:14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:700;font-size:14px">${c.vehiculos ? c.vehiculos.marca + ' ' + c.vehiculos.modelo + ' ' + c.vehiculos.anio : '—'}</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:3px">${c.moneda} ${Number(c.canon_mensual).toLocaleString('es-AR')}/mes · ${c.plazo_meses} meses</div>
-          </div>
-          ${estadoBadge(c.estado)}
-        </div>
-      `).join('') : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px">Sin contratos</div>'}
-      <div style="margin-top:20px;display:flex;gap:10px">
-        <button class="btn btn-outline" style="flex:1;justify-content:center;padding:13px" onclick="this.closest('.modal-overlay').remove();document.body.style.overflow=''">Cerrar</button>
-        <button class="btn btn-outline" style="flex:1;justify-content:center;padding:13px" onclick="reenviarMagicLink('${u.email}','${u.rol}')">📧 Reenviar acceso</button>
-        <button class="btn btn-dark" style="flex:1;justify-content:center;padding:13px" onclick="this.closest('.modal-overlay').remove();document.body.style.overflow='';openModal('modal-nuevo-lease');document.getElementById('nl-cliente-email').value='${u.email}';buscarCliente()">+ Nuevo leasing</button>
-      </div>
-    </div>`;
+
+  const card = document.createElement('div');
+  card.className = 'modal-card';
+
+  // Title row
+  const titleRow = document.createElement('div');
+  titleRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px';
+  const titleLeft = document.createElement('div');
+  titleLeft.innerHTML = '<div class="modal-title">' + (u.nombre||'—') + '</div><div style="margin-top:6px">' + (u.tipo==='juridica'?'<div class="badge badge-orange">Empresa</div>':'<div class="badge badge-blue">Persona física</div>') + '</div>';
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)';
+  closeBtn.onclick = () => { modal.remove(); document.body.style.overflow = ''; };
+  titleRow.appendChild(titleLeft);
+  titleRow.appendChild(closeBtn);
+  card.appendChild(titleRow);
+
+  // Detail grid
+  const grid = document.createElement('div');
+  grid.className = 'detail-grid';
+  const fields = [
+    ['Email', u.email], ['Teléfono', u.telefono||'—'],
+    ['CUIT', u.cuit||'—'], ['Wallet', u.wallet_address ? u.wallet_address.slice(0,10)+'...' : '—'],
+    ['Rol', u.rol||'—'], ['Registrado', u.created_at ? formatFecha(u.created_at.split('T')[0]) : '—']
+  ];
+  fields.forEach(([k,v]) => {
+    grid.innerHTML += '<div><div class="detail-key">' + k + '</div><div class="detail-val">' + v + '</div></div>';
+  });
+  card.appendChild(grid);
+
+  // Contracts
+  const contsTitle = document.createElement('div');
+  contsTitle.style.cssText = 'font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;margin-top:16px';
+  contsTitle.textContent = 'Contratos (' + (cts?.length||0) + ')';
+  card.appendChild(contsTitle);
+
+  if (cts && cts.length) {
+    cts.forEach(c => {
+      const veh = c.vehiculos ? c.vehiculos.marca + ' ' + c.vehiculos.modelo + ' ' + c.vehiculos.anio : '—';
+      const cRow = document.createElement('div');
+      cRow.style.cssText = 'background:var(--gray);border-radius:10px;padding:14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center';
+      cRow.innerHTML = '<div><div style="font-weight:700;font-size:14px">' + veh + '</div><div style="font-size:12px;color:var(--text3);margin-top:3px">' + c.moneda + ' ' + Number(c.canon_mensual).toLocaleString('es-AR') + '/mes</div></div>' + estadoBadge(c.estado);
+      card.appendChild(cRow);
+    });
+  } else {
+    const noConts = document.createElement('div');
+    noConts.style.cssText = 'font-size:13px;color:var(--text3);text-align:center;padding:16px';
+    noConts.textContent = 'Sin contratos';
+    card.appendChild(noConts);
+  }
+
+  // Footer buttons
+  const footer = document.createElement('div');
+  footer.style.cssText = 'margin-top:20px;display:flex;gap:10px';
+  
+  const btnCerrar = document.createElement('button');
+  btnCerrar.className = 'btn btn-outline';
+  btnCerrar.style.cssText = 'flex:1;justify-content:center;padding:13px';
+  btnCerrar.textContent = 'Cerrar';
+  btnCerrar.onclick = () => { modal.remove(); document.body.style.overflow = ''; };
+
+  const btnReenviar = document.createElement('button');
+  btnReenviar.className = 'btn btn-outline';
+  btnReenviar.style.cssText = 'flex:1;justify-content:center;padding:13px';
+  btnReenviar.textContent = '📧 Reenviar acceso';
+  btnReenviar.onclick = () => reenviarMagicLink(u.email, u.rol);
+
+  const btnLeasing = document.createElement('button');
+  btnLeasing.className = 'btn btn-dark';
+  btnLeasing.style.cssText = 'flex:1;justify-content:center;padding:13px';
+  btnLeasing.textContent = '+ Nuevo leasing';
+  btnLeasing.onclick = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+    openModal('modal-nuevo-lease');
+    document.getElementById('nl-cliente-email').value = u.email;
+    buscarCliente();
+  };
+
+  footer.appendChild(btnCerrar);
+  footer.appendChild(btnReenviar);
+  footer.appendChild(btnLeasing);
+  card.appendChild(footer);
+  modal.appendChild(card);
   document.body.appendChild(modal);
   document.body.style.overflow = 'hidden';
   modal.addEventListener('click', e => { if(e.target === modal) { modal.remove(); document.body.style.overflow = ''; } });
 }
+
 
 async function crearCliente() {
   const nombre = document.getElementById('nc-nombre').value.trim();
@@ -1532,16 +1581,19 @@ async function crearUsuario() {
 
     if (dbError) throw dbError;
 
-    // 3. Enviar magic link de bienvenida via Admin API
-    const { error: otpError } = await sbAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo }
+    // 3. Enviar magic link via API REST
+    const otpRes = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`
+      },
+      body: JSON.stringify({ email, create_user: false, options: { emailRedirectTo: redirectTo } })
     });
-
-    // Si falla generateLink, intentar con signInWithOtp como fallback
-    if (otpError) {
-      await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+    if (!otpRes.ok) {
+      const otpErr = await otpRes.json();
+      throw new Error(otpErr.message || 'Error al enviar el magic link');
     }
 
     await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
@@ -1562,12 +1614,17 @@ async function reenviarMagicLink(email, rol) {
     ? 'https://portal.phenixleasing.com' 
     : 'https://app.phenixleasing.com';
   try {
-    const { error } = await sb.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo }
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`
+      },
+      body: JSON.stringify({ email, create_user: false, options: { emailRedirectTo: redirectTo } })
     });
-    if (error) throw error;
-    showToast(`✓ Magic link reenviado a ${email}`);
+    if (!res.ok) throw new Error('Error al enviar');
+    showToast(`✓ Magic link enviado a ${email}`);
   } catch(e) {
     showToast(`Error al reenviar: ${e.message}`);
   }
