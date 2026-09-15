@@ -977,6 +977,17 @@ async function sendMagicLink() {
 document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') sendMagicLink(); });
 
 async function checkSession() {
+  // Handle magic link token from URL hash (when redirected from portal)
+  if (window.location.hash.includes('access_token')) {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (session) {
+      currentUser = session.user;
+      window.history.replaceState(null, '', window.location.pathname);
+      loadApp();
+      return;
+    }
+  }
+
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     currentUser = session.user;
