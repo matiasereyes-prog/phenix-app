@@ -3245,21 +3245,38 @@ async function importarCuotasExcel(input) {
     // Template Phenix Leasing — mapeo por nombre de columna del header
     const pn = v => { if (v === null || v === undefined || v === '' || v === '-') return null; const n = parseFloat(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n) ? null : n; };
     
-    // Leer header y crear mapa nombre->índice
-    const header = rows[0].map(h => String(h || '').trim().toLowerCase()
-      .replace('n° cuota', 'num').replace('número', 'num').replace('numero', 'num').replace('#', 'num')
-      .replace('fecha vencimiento', 'fecha').replace('fecha', 'fecha')
-      .replace('cuota (importe)', 'monto').replace('importe', 'monto').replace('cuota', 'monto')
-      .replace('amortización', 'capital').replace('amortizacion', 'capital').replace('amort', 'capital')
-      .replace('interés', 'interes').replace('interes', 'interes').replace('int período', 'interes').replace('int periodo', 'interes')
-      .replace('iva', 'iva')
-      .replace('seguro', 'seguro')
-      .replace('adicionales', 'adicion')
-      .replace('saldo restante', 'saldo').replace('saldo', 'saldo')
-    );
+    // Mapeo directo por posición usando el header del template Phenix
+    // Orden fijo: N°Cuota(0), Fecha(1), Cuota(2), Amort(3), Interés(4), IVA(5), Seguro(6), Adicionales(7), Saldo(8)
+    const rawHeader = rows[0].map(h => String(h || '').trim());
     
-    const col = name => header.indexOf(name);
-    const get = (row, name) => { const i = col(name); return i >= 0 ? row[i] : undefined; };
+    // Buscar cada columna por palabras clave sin depender de acentos
+    const normalize = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    const normHeader = rawHeader.map(normalize);
+    
+    const findCol = (...keys) => {
+      for (const key of keys) {
+        const nk = normalize(key);
+        const idx = normHeader.findIndex(h => h === nk || h.includes(nk));
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    };
+
+    const colNum     = findCol('n cuota', 'num', 'numero', 'cuota');
+    const colFecha   = findCol('fecha vencimiento', 'fecha');
+    const colMonto   = findCol('cuota importe', 'importe', 'monto');
+    const colCapital = findCol('amortizacion', 'amort', 'capital');
+    const colInteres = findCol('interes', 'int periodo', 'int');
+    const colIva     = findCol('iva');
+    const colSeguro  = findCol('seguro');
+    const colAdicion = findCol('adicionales', 'adicion');
+    const colSaldo   = findCol('saldo restante', 'saldo');
+
+    // Fallback a posicion fija si no encuentra por nombre
+    const ci = (found, fallback) => found >= 0 ? found : fallback;
+    
+    const col = () => {}; // dummy para compatibilidad
+    const get = () => {}; // dummy
 
     const cuotasData = [];
     for (let i = 1; i < rows.length; i++) {
@@ -3267,26 +3284,19 @@ async function importarCuotasExcel(input) {
       // Always pad to at least header length so empty cells don't shift columns
       while (row.length < Math.max(header.length, 9)) row.push(null);
       
-      const num = parseInt(col('num') >= 0 ? row[col('num')] : row[0]);
+      // Pad row to max column index needed
+      while (row.length <= Math.max(colNum, colFecha, colMonto, colCapital, colInteres, colIva, colSeguro, colAdicion, colSaldo, 8)) row.push(null);
+      
+      const num = parseInt(row[ci(colNum, 0)]);
       if (!isNaN(num) && num >= 1 && num <= 360) {
-        // Use column index from header map — empty cells stay null, don't shift
-        const cFecha   = col('fecha')   >= 0 ? col('fecha')   : 1;
-        const cMonto   = col('monto')   >= 0 ? col('monto')   : 2;
-        const cCapital = col('capital') >= 0 ? col('capital') : 3;
-        const cInteres = col('interes') >= 0 ? col('interes') : 4;
-        const cIva     = col('iva')     >= 0 ? col('iva')     : 5;
-        const cSeguro  = col('seguro')  >= 0 ? col('seguro')  : 6;
-        const cAdicion = col('adicion') >= 0 ? col('adicion') : 7;
-        const cSaldo   = col('saldo')   >= 0 ? col('saldo')   : 8;
-
-        const fecha   = excelDateToString(row[cFecha]);
-        const monto   = pn(row[cMonto]);
-        const capital = pn(row[cCapital]);
-        const interes = pn(row[cInteres]);
-        const iva     = pn(row[cIva]);
-        const seguro  = pn(row[cSeguro]);
-        const adicion = pn(row[cAdicion]);
-        const saldo   = pn(row[cSaldo]);
+        const fecha   = excelDateToString(row[ci(colFecha,   1)]);
+        const monto   = pn(row[ci(colMonto,   2)]);
+        const capital = pn(row[ci(colCapital, 3)]);
+        const interes = pn(row[ci(colInteres, 4)]);
+        const iva     = pn(row[ci(colIva,     5)]);
+        const seguro  = pn(row[ci(colSeguro,  6)]);
+        const adicion = pn(row[ci(colAdicion, 7)]);
+        const saldo   = pn(row[ci(colSaldo,   8)]);
 
         if (monto !== null || capital !== null) {
           cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, iva, seguro, adicionales_monto: adicion, saldo_restante: saldo });
