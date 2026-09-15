@@ -330,7 +330,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-leads" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Leads</div>
+        <button class="btn btn-outline" onclick="exportarExcel('leads')">⬇ Excel</button>
       </div>
+      <div id="leads-stats-container" style="margin-bottom:20px"></div>
       <div class="search-bar">
         <input class="search-input" type="text" id="search-leads" placeholder="Buscar por nombre o email..." oninput="filterLeads()"/>
         <select class="filter-select" id="filter-lead-estado" onchange="filterLeads()">
@@ -689,6 +691,54 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <label class="form-label">Observaciones</label>
       <input class="form-input" id="lead-observaciones" placeholder="Notas internas..."/>
     </div>
+    <!-- Historial de contactos -->
+    <div style="margin-top:20px;border-top:1.5px solid var(--border);padding-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px">Historial de contactos</div>
+        <button class="btn btn-outline btn-sm" onclick="toggleNuevoContacto()">+ Agregar</button>
+      </div>
+
+      <!-- Formulario nuevo contacto -->
+      <div id="form-nuevo-contacto" style="display:none;background:var(--gray);border-radius:10px;padding:14px;margin-bottom:12px">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select class="form-select" id="hc-tipo">
+              <option value="llamada">📞 Llamada</option>
+              <option value="whatsapp">💬 WhatsApp</option>
+              <option value="email">📧 Email</option>
+              <option value="reunion">🤝 Reunión</option>
+              <option value="nota">📝 Nota interna</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Resultado</label>
+            <select class="form-select" id="hc-resultado">
+              <option value="contactado">Contactado</option>
+              <option value="sin_respuesta">Sin respuesta</option>
+              <option value="interesado">Interesado</option>
+              <option value="no_interesado">No interesado</option>
+              <option value="cita_agendada">Cita agendada</option>
+              <option value="cotizacion_enviada">Cotización enviada</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <input class="form-input" id="hc-descripcion" placeholder="Resumen de la interacción..."/>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          <button class="btn btn-outline btn-sm" onclick="toggleNuevoContacto()">Cancelar</button>
+          <button class="btn btn-dark btn-sm" onclick="guardarContacto()">Guardar</button>
+        </div>
+      </div>
+
+      <!-- Lista de contactos -->
+      <div id="lista-historial-lead" style="max-height:200px;overflow-y:auto">
+        <div style="text-align:center;padding:16px;font-size:13px;color:var(--text3)">Cargando historial...</div>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-detalle-lead')">Cerrar</button>
       <button class="btn btn-dark" onclick="actualizarLead()">Guardar cambios</button>
@@ -938,6 +988,45 @@ const sbAdmin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false, storageKey: 'sb-admin-session' }
 });
 
+// ── Edge Function helper — reemplazará a sbAdmin progresivamente ──
+const EDGE_URL = 'https://xxscdrwkoutlualpveif.supabase.co/functions/v1/admin-query';
+const EDGE_USERS_URL = 'https://xxscdrwkoutlualpveif.supabase.co/functions/v1/swift-service';
+
+async function edgeUsers(action, payload = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Sin sesión');
+  const res = await fetch(EDGE_USERS_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + session.access_token,
+      'apikey': SUPABASE_KEY
+    },
+    body: JSON.stringify({ action, ...payload })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Edge Function error: ' + res.status);
+  }
+  return await res.json();
+}
+
+async function edgeQuery(action, table, options = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Sin sesión');
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + session.access_token,
+      'apikey': SUPABASE_KEY
+    },
+    body: JSON.stringify({ action, table, ...options })
+  });
+  if (!res.ok) throw new Error('Edge Function error: ' + res.status);
+  return await res.json();
+}
+
 let currentUser = null;
 let walletConnected = false;
 const LEASE_ABI = [
@@ -1037,7 +1126,12 @@ async function loadApp() {
     });
   }
 
-  await registrarLog('login', `Acceso al backend desde ${email}`);
+  // Solo registrar login si no hay sesión reciente (evitar ruido)
+  const lastLogin = sessionStorage.getItem('last_login_logged');
+  if (!lastLogin || Date.now() - parseInt(lastLogin) > 300000) {
+    await registrarLog('login', 'Acceso al backend desde ' + email);
+    sessionStorage.setItem('last_login_logged', Date.now().toString());
+  }
   await Promise.all([loadDashboard(), loadVehiculos()]);
   window.history.replaceState(null, '', window.location.pathname);
 }
@@ -1054,7 +1148,7 @@ function showView(view) {
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
-  if (view === 'leads') loadLeads();
+  if (view === 'leads') { loadLeads(); loadLeadsStats(); }
   if (view === 'vehiculos') loadVehiculos();
   if (view === 'usuarios') loadUsuarios();
   if (view === 'logs') loadLogs();
@@ -1536,6 +1630,19 @@ async function crearLease() {
     return;
   }
 
+  // Validar que el vehículo no tenga contrato activo
+  if (vehiculoId) {
+    const { data: contratoActivo } = await sbAdmin.from('contratos')
+      .select('id')
+      .eq('vehiculo_id', vehiculoId)
+      .in('estado', ['activo', 'borrador'])
+      .maybeSingle();
+    if (contratoActivo) {
+      document.getElementById('nl-msg').innerHTML = '<div class="alert alert-error">⚠️ Este vehículo ya tiene un contrato activo. Seleccioná otro.</div>';
+      return;
+    }
+  }
+
   document.getElementById('btn-crear-lease').disabled = true;
   document.getElementById('crear-lease-text').style.display = 'none';
   document.getElementById('crear-lease-spinner').style.display = 'inline-block';
@@ -1582,7 +1689,7 @@ async function crearLease() {
     const { data: contrato, error: errContrato } = await sbAdmin.from('contratos').insert(contratoData).select('id').single();
     if (errContrato) throw errContrato;
 
-    // Generar cuotas automáticamente
+    // Generar cuotas automáticamente — si falla, revertir el contrato
     if (fechaInicio && plazo && estado === 'activo') {
       const cuotas = Array.from({ length: parseInt(plazo) }, (_, i) => {
         const venc = new Date(fechaInicio);
@@ -1595,7 +1702,13 @@ async function crearLease() {
           estado: 'pendiente'
         };
       });
-      await sbAdmin.from('cuotas').insert(cuotas);
+      const { error: cuotasError } = await sbAdmin.from('cuotas').insert(cuotas);
+      if (cuotasError) {
+        // Revertir: borrar el contrato creado
+        await sbAdmin.from('contratos').delete().eq('id', contrato.id);
+        if (vehiculoId) await sbAdmin.from('vehiculos').update({ estado: 'disponible' }).eq('id', vehiculoId);
+        throw new Error('Error al crear cuotas: ' + cuotasError.message + '. El contrato fue revertido.');
+      }
     }
 
     showToast('✓ Leasing creado correctamente');
@@ -1801,6 +1914,7 @@ function abrirDetalleLead(id) {
     ['Canal', l.canal||'landing'], ['Fecha', formatFecha(l.created_at?.split('T')[0])],
   ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
   openModal('modal-detalle-lead');
+  loadHistorialLead(currentLeadId);
 }
 
 async function actualizarLead() {
@@ -1827,13 +1941,20 @@ async function loadVehiculos() {
   if (tbody && data) {
     if (!data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-text">Sin vehículos registrados.</div></div></td></tr>`; }
     else {
-      tbody.innerHTML = data.map(v => `<tr>
-        <td class="bold">${v.marca}</td><td>${v.modelo}</td><td class="mono">${v.anio}</td>
-        <td class="mono" style="font-size:11px">${v.vin}</td><td>${v.patente||'—'}</td>
-        <td class="bold">USD ${Number(v.precio_usd).toLocaleString()}</td>
-        <td>${estadoBadge(v.estado)}</td>
-        <td><button class="btn btn-outline btn-sm">Editar</button></td>
-      </tr>`).join('');
+      let vhtml = '';
+      data.forEach(v => {
+        vhtml += '<tr>';
+        vhtml += '<td class="bold">' + v.marca + '</td>';
+        vhtml += '<td>' + v.modelo + '</td>';
+        vhtml += '<td class="mono">' + v.anio + '</td>';
+        vhtml += '<td class="mono" style="font-size:11px">' + v.vin + '</td>';
+        vhtml += '<td>' + (v.patente||'—') + '</td>';
+        vhtml += '<td class="bold">USD ' + Number(v.precio_usd).toLocaleString() + '</td>';
+        vhtml += '<td>' + estadoBadge(v.estado) + '</td>';
+        vhtml += '<td><button class="btn btn-outline btn-sm" onclick="editarVehiculo(\'' + v.id + '\')">Editar</button></td>';
+        vhtml += '</tr>';
+      });
+      tbody.innerHTML = vhtml;
     }
   }
   // Poblar select en modal
@@ -1841,6 +1962,64 @@ async function loadVehiculos() {
   if (select && data) {
     select.innerHTML = `<option value="">Sin seleccionar</option>` + data.filter(v=>v.estado==='disponible').map(v => `<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} - ${v.vin}</option>`).join('');
   }
+}
+
+async function editarVehiculo(id) {
+  const { data: v } = await sbAdmin.from('vehiculos').select('*').eq('id', id).single();
+  if (!v) return;
+
+  // Populate form with existing data
+  document.getElementById('nv-marca').value = v.marca;
+  document.getElementById('nv-modelo').value = v.modelo;
+  document.getElementById('nv-anio').value = v.anio;
+  document.getElementById('nv-vin').value = v.vin;
+  document.getElementById('nv-patente').value = v.patente || '';
+  document.getElementById('nv-color').value = v.color || '';
+  document.getElementById('nv-precio').value = v.precio_usd;
+  document.getElementById('nv-estado').value = v.estado;
+
+  // Change modal to edit mode
+  document.querySelector('#modal-nuevo-vehiculo .modal-title').textContent = 'Editar vehículo';
+  const btn = document.querySelector('#modal-nuevo-vehiculo .btn-dark');
+  btn.textContent = 'Guardar cambios';
+  btn.onclick = () => guardarVehiculo(id);
+  document.getElementById('nv-msg').innerHTML = '';
+  openModal('modal-nuevo-vehiculo');
+}
+
+async function guardarVehiculo(id) {
+  const marca = document.getElementById('nv-marca').value.trim();
+  const modelo = document.getElementById('nv-modelo').value.trim();
+  const anio = document.getElementById('nv-anio').value;
+  const vin = document.getElementById('nv-vin').value.trim();
+  const patente = document.getElementById('nv-patente').value.trim();
+  const color = document.getElementById('nv-color').value.trim();
+  const precio = document.getElementById('nv-precio').value;
+  const estado = document.getElementById('nv-estado').value;
+
+  if (!marca || !modelo || !vin || !precio) {
+    document.getElementById('nv-msg').innerHTML = '<div class="alert alert-error">Completá los campos obligatorios.</div>';
+    return;
+  }
+
+  const { error } = await sbAdmin.from('vehiculos').update({
+    marca, modelo, anio: parseInt(anio), vin, patente: patente||null,
+    color: color||null, precio_usd: parseFloat(precio), estado
+  }).eq('id', id);
+
+  if (error) {
+    document.getElementById('nv-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  showToast('✓ Vehículo actualizado');
+  closeModal('modal-nuevo-vehiculo');
+  // Reset modal to create mode
+  document.querySelector('#modal-nuevo-vehiculo .modal-title').textContent = 'Nuevo vehículo';
+  const btn = document.querySelector('#modal-nuevo-vehiculo .btn-dark');
+  btn.textContent = 'Agregar vehículo';
+  btn.onclick = crearVehiculo;
+  loadVehiculos();
 }
 
 async function crearVehiculo() {
@@ -1948,49 +2127,14 @@ async function crearUsuario() {
       return;
     }
 
-    // 1. Crear usuario en Supabase Auth via Admin API
-    const redirectTo = rol === 'lessee' 
-      ? 'https://portal.phenixleasing.com' 
+    // Crear usuario via Edge Function (sin exponer service_role key)
+    const redirectTo = rol === 'lessee'
+      ? 'https://portal.phenixleasing.com'
       : 'https://app.phenixleasing.com';
-    
-    const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { nombre, tipo }
-    });
 
-    if (authError && !authError.message.includes('already been registered')) {
-      throw authError;
-    }
+    await edgeUsers('create_user', { email, nombre, rol, tipo, telefono, cuit, redirectTo });
 
-    const authId = authData?.user?.id || null;
-
-    // 2. Insertar o actualizar en tabla usuarios
-    const { error: dbError } = await sbAdmin.from('usuarios').upsert({
-      auth_id: authId,
-      email, nombre, rol, tipo,
-      telefono: telefono || null,
-      cuit: cuit || null
-    }, { onConflict: 'email' });
-
-    if (dbError) throw dbError;
-
-    // 3. Enviar magic link via API REST
-    const otpRes = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`
-      },
-      body: JSON.stringify({ email, create_user: false, options: { emailRedirectTo: redirectTo } })
-    });
-    if (!otpRes.ok) {
-      const otpErr = await otpRes.json();
-      throw new Error(otpErr.message || 'Error al enviar el magic link');
-    }
-
-    await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
+        await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
     showToast(`✓ Usuario creado y magic link enviado a ${email}`);
     closeModal('modal-nuevo-usuario');
     loadUsuarios();
@@ -2004,23 +2148,14 @@ async function crearUsuario() {
 }
 
 async function reenviarMagicLink(email, rol) {
-  const redirectTo = rol === 'lessee' 
-    ? 'https://portal.phenixleasing.com' 
+  const redirectTo = rol === 'lessee'
+    ? 'https://portal.phenixleasing.com'
     : 'https://app.phenixleasing.com';
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`
-      },
-      body: JSON.stringify({ email, create_user: false, options: { emailRedirectTo: redirectTo } })
-    });
-    if (!res.ok) throw new Error('Error al enviar');
-    showToast(`✓ Magic link enviado a ${email}`);
+    await edgeUsers('resend_magic_link', { email, redirectTo });
+    showToast('✓ Magic link enviado a ' + email);
   } catch(e) {
-    showToast(`Error al reenviar: ${e.message}`);
+    showToast('Error al reenviar: ' + e.message);
   }
 }
 
@@ -2184,6 +2319,135 @@ async function exportarExcel(vista) {
   } catch(e) {
     showToast('Error al exportar: ' + e.message);
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// HISTORIAL DE LEADS
+// ══════════════════════════════════════════════════════════════════
+function toggleNuevoContacto() {
+  const f = document.getElementById('form-nuevo-contacto');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  if (f.style.display === 'block') {
+    document.getElementById('hc-descripcion').value = '';
+  }
+}
+
+async function loadHistorialLead(leadId) {
+  const { data } = await sbAdmin.from('leads_historial')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('lista-historial-lead');
+  if (!data || !data.length) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;font-size:13px;color:var(--text3)">Sin contactos registrados aún.</div>';
+    return;
+  }
+
+  const tipoIcons = { llamada: '📞', whatsapp: '💬', email: '📧', reunion: '🤝', nota: '📝' };
+  const resultColors = { contactado: 'badge-blue', sin_respuesta: 'badge-gray', interesado: 'badge-green', no_interesado: 'badge-red', cita_agendada: 'badge-orange', cotizacion_enviada: 'badge-blue' };
+
+  let html = '';
+  data.forEach(h => {
+    const fecha = h.created_at ? new Date(h.created_at).toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+    html += '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">';
+    html += '<div style="font-size:18px;flex-shrink:0;margin-top:2px">' + (tipoIcons[h.tipo] || '📌') + '</div>';
+    html += '<div style="flex:1">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--text);text-transform:capitalize">' + h.tipo + '</span>';
+    if (h.resultado) html += '<div class="badge ' + (resultColors[h.resultado] || 'badge-gray') + '" style="font-size:10px">' + h.resultado.replace(/_/g,' ') + '</div>';
+    html += '</div>';
+    if (h.descripcion) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + h.descripcion + '</div>';
+    html += '<div style="font-size:11px;color:var(--text3)">' + fecha + (h.responsable ? ' · ' + h.responsable : '') + '</div>';
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+async function guardarContacto() {
+  const tipo = document.getElementById('hc-tipo').value;
+  const resultado = document.getElementById('hc-resultado').value;
+  const descripcion = document.getElementById('hc-descripcion').value.trim();
+
+  if (!descripcion) { showToast('Ingresá una descripción'); return; }
+
+  const { error } = await sbAdmin.from('leads_historial').insert({
+    lead_id: currentLeadId,
+    tipo, resultado, descripcion,
+    responsable: currentUser?.email || '—'
+  });
+
+  if (error) { showToast('Error: ' + error.message); return; }
+
+  showToast('✓ Contacto registrado');
+  toggleNuevoContacto();
+  loadHistorialLead(currentLeadId);
+
+  // Actualizar estado del lead según resultado
+  if (resultado === 'interesado') {
+    await sbAdmin.from('leads').update({ estado: 'calificado' }).eq('id', currentLeadId);
+  } else if (resultado === 'cita_agendada') {
+    await sbAdmin.from('leads').update({ estado: 'cotizado' }).eq('id', currentLeadId);
+  }
+  loadLeads();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ESTADÍSTICAS DE LEADS
+// ══════════════════════════════════════════════════════════════════
+async function loadLeadsStats() {
+  const { data: leads } = await sbAdmin.from('leads').select('estado, canal, red_origen, responsable, created_at');
+  if (!leads || !leads.length) return;
+
+  const total = leads.length;
+  const convertidos = leads.filter(l => l.estado === 'convertido').length;
+  const tasa = total > 0 ? Math.round((convertidos / total) * 100) : 0;
+
+  // Por estado
+  const porEstado = {};
+  leads.forEach(l => { porEstado[l.estado] = (porEstado[l.estado] || 0) + 1; });
+
+  // Por canal
+  const porCanal = {};
+  leads.forEach(l => { const c = l.red_origen || l.canal || 'directo'; porCanal[c] = (porCanal[c] || 0) + 1; });
+
+  // Por responsable
+  const porResp = {};
+  leads.forEach(l => { if (l.responsable) porResp[l.responsable] = (porResp[l.responsable] || 0) + 1; });
+
+  const statsHtml = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">' +
+    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total leads</div>' +
+      '<div style="font-size:28px;font-weight:800;color:var(--black)">' + total + '</div></div>' +
+    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Convertidos</div>' +
+      '<div style="font-size:28px;font-weight:800;color:var(--green)">' + convertidos + '</div></div>' +
+    '<div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Tasa conversión</div>' +
+      '<div style="font-size:28px;font-weight:800;color:var(--orange)">' + tasa + '%</div></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div style="background:var(--gray);border-radius:10px;padding:14px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Por canal</div>' +
+        Object.entries(porCanal).sort((a,b) => b[1]-a[1]).map(([k,v]) =>
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
+          '<span style="color:var(--text2);text-transform:capitalize">' + k + '</span>' +
+          '<span style="font-weight:700;color:var(--text)">' + v + ' <span style="color:var(--text3);font-weight:400">(' + Math.round(v/total*100) + '%)</span></span></div>'
+        ).join('') +
+      '</div>' +
+      '<div style="background:var(--gray);border-radius:10px;padding:14px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Por estado</div>' +
+        Object.entries(porEstado).sort((a,b) => b[1]-a[1]).map(([k,v]) =>
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
+          '<span style="color:var(--text2);text-transform:capitalize">' + k.replace(/_/g,' ') + '</span>' +
+          '<span style="font-weight:700;color:var(--text)">' + v + '</span></div>'
+        ).join('') +
+      '</div>' +
+    '</div>';
+
+  // Insert stats before leads table
+  const statsContainer = document.getElementById('leads-stats-container');
+  if (statsContainer) statsContainer.innerHTML = statsHtml;
 }
 
 // INIT
