@@ -3282,7 +3282,7 @@ async function importarCuotasExcel(input) {
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       // Always pad to at least header length so empty cells don't shift columns
-      while (row.length < Math.max(header.length, 9)) row.push(null);
+      // padding handled below
       
       // Pad row to max column index needed
       while (row.length <= Math.max(colNum, colFecha, colMonto, colCapital, colInteres, colIva, colSeguro, colAdicion, colSaldo, 8)) row.push(null);
