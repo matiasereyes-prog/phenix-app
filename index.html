@@ -6,6 +6,7 @@
 <title>Phenix Leasing · Backend</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -657,7 +658,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
 <!-- ══ MODAL: DETALLE LEASING COMPLETO ══════════════════════════ -->
 <div class="modal-overlay" id="modal-lease-detail">
-  <div class="modal-card" style="max-width:640px">
+  <div class="modal-card" style="max-width:680px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
       <div>
         <div class="modal-title" id="ld-titulo">Detalle del leasing</div>
@@ -684,40 +685,78 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     </div>
 
     <!-- Escrow blockchain -->
-    <div id="ld-escrow-section" style="display:none;background:var(--black);border-radius:12px;padding:20px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;color:white;display:flex;align-items:center;gap:8px">
+    <div id="ld-escrow-section" style="display:none;background:var(--black);border-radius:16px;padding:24px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:14px;font-weight:700;color:white;display:flex;align-items:center;gap:8px">
           ⛓ Escrow blockchain
-          <div class="badge badge-blue" id="ld-chain-badge">Base</div>
+          <div class="badge badge-blue">Base Mainnet</div>
         </div>
-        <a id="ld-basescan-link" href="#" target="_blank" style="font-size:12px;color:#60a5fa;font-family:var(--mono)">Ver en Basescan ↗</a>
+        <a id="ld-basescan-link" href="#" target="_blank" style="font-size:12px;color:#60a5fa;font-family:var(--mono);text-decoration:none">Ver en Basescan ↗</a>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+
+      <!-- Montos -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
         <div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Total</div>
-          <div style="font-size:20px;font-weight:800;color:white;font-family:var(--mono)" id="ld-escrow-total">—</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Total depositado</div>
+          <div style="font-size:22px;font-weight:800;color:white;font-family:var(--mono);letter-spacing:-0.5px" id="ld-escrow-total">—</div>
         </div>
         <div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Liberado</div>
-          <div style="font-size:20px;font-weight:800;color:#4ade80;font-family:var(--mono)" id="ld-escrow-liberado">—</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Liberado</div>
+          <div style="font-size:22px;font-weight:800;color:#4ade80;font-family:var(--mono);letter-spacing:-0.5px" id="ld-escrow-liberado">—</div>
         </div>
         <div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">Bloqueado</div>
-          <div style="font-size:20px;font-weight:800;color:#fbbf24;font-family:var(--mono)" id="ld-escrow-bloqueado">—</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Bloqueado</div>
+          <div style="font-size:22px;font-weight:800;color:#fbbf24;font-family:var(--mono);letter-spacing:-0.5px" id="ld-escrow-bloqueado">—</div>
+        </div>
+      </div>
+
+      <!-- Progress escrow -->
+      <div style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:6px">
+          <span>ESCROW LIBERADO</span>
+          <span id="ld-escrow-pct">0%</span>
+        </div>
+        <div style="width:100%;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+          <div id="ld-escrow-progress" style="height:100%;background:linear-gradient(90deg,#3366ff,#4ade80);border-radius:4px;width:0%;transition:width 0.8s"></div>
+        </div>
+      </div>
+
+      <!-- Wallet info -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">Wallet lessee</div>
+          <div style="font-size:12px;color:white;font-family:var(--mono)" id="ld-wallet-lessee">—</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">Contrato on-chain</div>
+          <div style="font-size:12px;font-family:var(--mono)" id="ld-contrato-address">—</div>
         </div>
       </div>
 
       <!-- Condiciones -->
       <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Condiciones de liberación</div>
-      <div id="ld-condiciones" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
+      <div id="ld-condiciones" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-bottom:16px"></div>
 
-      <!-- Acciones blockchain -->
-      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-green btn-sm" onclick="ejecutarCompleteCondition()" id="btn-complete-cond-detail">✓ Marcar condición</button>
-        <button class="btn btn-sm" style="background:#ef4444;color:white" onclick="ejecutarDisputa()">⚠️ Iniciar disputa</button>
-        <a id="ld-basescan-btn" href="#" target="_blank" class="btn btn-outline btn-sm">Basescan ↗</a>
+      <!-- Marcar condicion inline -->
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);margin-bottom:10px">Marcar condición cumplida</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="number" id="ld-cond-idx" placeholder="Índice (0, 1, 2...)" min="0" style="flex:1;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;color:white;font-family:var(--sans);font-size:13px;outline:none"/>
+          <select id="ld-favor-lessor" style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;color:white;font-family:var(--sans);font-size:13px;outline:none">
+            <option value="false">✅ Al lessee (cumplió)</option>
+            <option value="true">❌ Al lessor (incumplió)</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-green" style="flex:1;justify-content:center;padding:10px" id="btn-marcar-cond" onclick="marcarCondicionInline()">
+            <span id="btn-marcar-text">✓ Ejecutar en blockchain</span>
+            <div class="spinner" id="spinner-marcar" style="display:none;border-top-color:white"></div>
+          </button>
+          <button class="btn btn-sm" style="background:#ef4444;color:white;flex:1;justify-content:center;padding:10px" id="btn-disputa-inline" onclick="ejecutarDisputaInline()">⚠️ Iniciar disputa</button>
+        </div>
       </div>
-      <div id="ld-blockchain-msg" style="margin-top:10px"></div>
+
+      <div id="ld-blockchain-msg" style="margin-top:8px"></div>
     </div>
 
     <!-- Cambiar estado -->
@@ -1018,31 +1057,43 @@ async function abrirDetalleLease(id) {
   // Escrow section
   if (l.tipo === 'escrow_blockchain' && l.contrato_address_onchain) {
     document.getElementById('ld-escrow-section').style.display = 'block';
-    document.getElementById('ld-escrow-total').textContent = `${l.escrow_monto || 0} ${l.escrow_token}`;
-    document.getElementById('ld-escrow-liberado').textContent = `${l.escrow_liberado || 0} ${l.escrow_token}`;
-    document.getElementById('ld-escrow-bloqueado').textContent = `${l.escrow_bloqueado || 0} ${l.escrow_token}`;
-    const basescanUrl = `https://basescan.org/address/${l.contrato_address_onchain}`;
+    const token = l.escrow_token || '';
+    const total = parseFloat(l.escrow_monto) || 0;
+    const liberado = parseFloat(l.escrow_liberado) || 0;
+    const bloqueado = parseFloat(l.escrow_bloqueado) || 0;
+    const escrowPct = total > 0 ? Math.round((liberado/total)*100) : 0;
+
+    document.getElementById('ld-escrow-total').textContent = total + ' ' + token;
+    document.getElementById('ld-escrow-liberado').textContent = liberado + ' ' + token;
+    document.getElementById('ld-escrow-bloqueado').textContent = bloqueado + ' ' + token;
+    document.getElementById('ld-escrow-pct').textContent = escrowPct + '%';
+    setTimeout(() => { document.getElementById('ld-escrow-progress').style.width = escrowPct + '%'; }, 100);
+
+    const basescanUrl = 'https://basescan.org/address/' + l.contrato_address_onchain;
     document.getElementById('ld-basescan-link').href = basescanUrl;
-    document.getElementById('ld-basescan-btn').href = basescanUrl;
+    document.getElementById('ld-wallet-lessee').textContent = l.wallet_lessee ? l.wallet_lessee.slice(0,8)+'...'+l.wallet_lessee.slice(-6) : '—';
+    document.getElementById('ld-contrato-address').innerHTML = '<a href="' + basescanUrl + '" target="_blank" style="color:#60a5fa;text-decoration:none">' + l.contrato_address_onchain.slice(0,8)+'...'+l.contrato_address_onchain.slice(-6) + ' ↗</a>';
 
     // Render condiciones
     const condsEl = document.getElementById('ld-condiciones');
     if (condiciones && condiciones.length) {
-      condsEl.innerHTML = condiciones.map(c => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:${c.estado==='cumplida'?'rgba(74,222,128,0.1)':'rgba(255,255,255,0.05)'}">
-          <span style="font-size:13px">${c.estado==='cumplida'?'✅':'⏳'}</span>
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:600;color:white">${c.descripcion}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.4);font-family:var(--mono)">${c.porcentaje_bps/100}% · índice #${c.index_onchain}</div>
-          </div>
-          ${c.estado==='cumplida' 
-            ? `<span style="font-size:11px;color:#4ade80;font-weight:700;font-family:var(--mono)">${c.monto_liberado||0} ${l.escrow_token}</span>`
-            : `<button class="btn btn-sm" style="background:rgba(255,255,255,0.1);color:white;font-size:11px" onclick="marcarCondicion(${c.index_onchain})">Marcar</button>`
-          }
-        </div>
-      `).join('');
+      let condsHtml = '';
+      condiciones.forEach(c => {
+        const isDone = c.estado === 'cumplida';
+        const bg = isDone ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.05)';
+        const monto = c.monto_liberado ? c.monto_liberado + ' ' + token : ((c.porcentaje_bps/10000)*total).toFixed(4) + ' ' + token;
+        condsHtml += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:' + bg + ';margin-bottom:4px">';
+        condsHtml += '<span style="font-size:13px">' + (isDone ? '✅' : '⏳') + '</span>';
+        condsHtml += '<div style="flex:1">';
+        condsHtml += '<div style="font-size:12px;font-weight:600;color:white">' + c.descripcion + '</div>';
+        condsHtml += '<div style="font-size:10px;color:rgba(255,255,255,0.4);font-family:var(--mono)">' + (c.porcentaje_bps/100) + '% · índice #' + c.index_onchain + (isDone ? ' · ' + (c.favor_lessor ? 'al lessor' : 'al lessee') : '') + '</div>';
+        condsHtml += '</div>';
+        condsHtml += '<span style="font-size:11px;color:' + (isDone ? '#4ade80' : '#fbbf24') + ';font-weight:700;font-family:var(--mono)">' + monto + '</span>';
+        condsHtml += '</div>';
+      });
+      condsEl.innerHTML = condsHtml;
     } else {
-      condsEl.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">Sin condiciones registradas</div>';
+      condsEl.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">Sin condiciones registradas en Supabase. Consultá el contrato on-chain.</div>';
     }
   } else {
     document.getElementById('ld-escrow-section').style.display = 'none';
@@ -1050,6 +1101,88 @@ async function abrirDetalleLease(id) {
 
   openModal('modal-lease-detail');
 }
+
+async function actualizarEstadoLease() {
+  const estado = document.getElementById('ld-nuevo-estado').value;
+  const { error } = await sbAdmin.from('contratos').update({ estado }).eq('id', currentLeaseId);
+  if (error) { document.getElementById('ld-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
+  await registrarLog('cambio_estado_lease', `Cambió estado del lease ${currentLeaseId} a ${estado}`);
+  showToast(`✓ Estado actualizado a ${estado}`);
+  closeModal('modal-lease-detail');
+  loadLeasings();
+  loadDashboard();
+}
+
+async function marcarCondicionInline() {
+  const condIdx = document.getElementById('ld-cond-idx').value;
+  const favorLessor = document.getElementById('ld-favor-lessor').value === 'true';
+  if (condIdx === '') { showToast('Ingresá el índice de la condición'); return; }
+  if (!window.ethereum) { showToast('Instalá MetaMask para operar'); return; }
+
+  document.getElementById('btn-marcar-cond').disabled = true;
+  document.getElementById('btn-marcar-text').style.display = 'none';
+  document.getElementById('spinner-marcar').style.display = 'inline-block';
+  document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Confirmando en MetaMask...</div>';
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 8453) {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
+    }
+    const signer = await provider.getSigner();
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_token').eq('id', currentLeaseId).single();
+    const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
+    const tx = await contract.completeCondition(parseInt(l.lease_id_onchain), parseInt(condIdx), favorLessor);
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+    await tx.wait();
+
+    await sbAdmin.from('condiciones_escrow').update({
+      estado: 'cumplida', favor_lessor: favorLessor,
+      tx_hash: tx.hash,
+      fecha_cumplimiento: new Date().toISOString().split('T')[0]
+    }).eq('contrato_id', currentLeaseId).eq('index_onchain', parseInt(condIdx));
+
+    await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + l.lease_id_onchain);
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
+    showToast('✓ Condición marcada en blockchain');
+    setTimeout(() => abrirDetalleLease(currentLeaseId), 2000);
+  } catch(e) {
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Error') + '</div>';
+  } finally {
+    document.getElementById('btn-marcar-cond').disabled = false;
+    document.getElementById('btn-marcar-text').style.display = 'inline';
+    document.getElementById('spinner-marcar').style.display = 'none';
+  }
+}
+
+async function ejecutarDisputaInline() {
+  if (!window.ethereum) { showToast('Instalá MetaMask para operar'); return; }
+  if (!confirm('Iniciar disputa? Los fondos quedan bloqueados hasta que el arbitro resuelva.')) return;
+
+  document.getElementById('btn-disputa-inline').disabled = true;
+  document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Confirmando en MetaMask...</div>';
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const signer = await provider.getSigner();
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain').eq('id', currentLeaseId).single();
+    const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
+    const tx = await contract.raiseDispute(parseInt(l.lease_id_onchain));
+    await tx.wait();
+    await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', currentLeaseId);
+    await registrarLog('raise_dispute', 'Inició disputa en lease ' + l.lease_id_onchain);
+    showToast('⚠️ Disputa iniciada en blockchain');
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--yellow)">Ver TX ↗</a></div>';
+  } catch(e) {
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Error') + '</div>';
+  } finally {
+    document.getElementById('btn-disputa-inline').disabled = false;
+  }
+}
+
 
 async function actualizarEstadoLease() {
   const estado = document.getElementById('ld-nuevo-estado').value;
@@ -1689,6 +1822,107 @@ async function loadLogs() {
     <td><div class="badge badge-blue">${l.accion}</div></td>
     <td style="font-size:13px;color:var(--text2)">${l.detalle}</td>
   </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EXPORT A EXCEL
+// ══════════════════════════════════════════════════════════════════
+async function exportarExcel(vista) {
+  let data = [];
+  let filename = '';
+  const fecha = new Date().toISOString().split('T')[0];
+
+  try {
+    if (vista === 'leasings') {
+      const { data: rows } = await sbAdmin.from('contratos')
+        .select('*, usuarios!contratos_usuario_id_fkey(nombre,email), vehiculos(marca,modelo,anio,vin)')
+        .order('created_at', { ascending: false });
+      data = (rows||[]).map(r => ({
+        'ID': r.id,
+        'Cliente': r.usuarios?.nombre || '—',
+        'Email': r.usuarios?.email || '—',
+        'Vehículo': r.vehiculos ? r.vehiculos.marca+' '+r.vehiculos.modelo+' '+r.vehiculos.anio : '—',
+        'VIN': r.vehiculos?.vin || '—',
+        'Tipo': r.tipo,
+        'Estado': r.estado,
+        'Moneda': r.moneda,
+        'Canon mensual': r.canon_mensual,
+        'Plazo (meses)': r.plazo_meses,
+        'Fecha inicio': r.fecha_inicio || '—',
+        'Fecha fin': r.fecha_fin || '—',
+        'Opción de compra': r.opcion_compra || '—',
+        'Escrow monto': r.escrow_monto || '—',
+        'Escrow token': r.escrow_token || '—',
+        'Lease ID onchain': r.lease_id_onchain || '—',
+        'Creado': r.created_at?.split('T')[0] || '—',
+      }));
+      filename = 'leasings_' + fecha + '.xlsx';
+
+    } else if (vista === 'clientes') {
+      const { data: rows } = await sbAdmin.from('usuarios')
+        .select('*').in('rol', ['lessee']).order('created_at', { ascending: false });
+      data = (rows||[]).map(r => ({
+        'Nombre': r.nombre || '—',
+        'Email': r.email,
+        'Tipo': r.tipo,
+        'CUIT': r.cuit || '—',
+        'Teléfono': r.telefono || '—',
+        'Wallet': r.wallet_address || '—',
+        'Rol': r.rol,
+        'Activo': r.activo !== false ? 'Sí' : 'No',
+        'Registrado': r.created_at?.split('T')[0] || '—',
+      }));
+      filename = 'clientes_' + fecha + '.xlsx';
+
+    } else if (vista === 'leads') {
+      const { data: rows } = await sbAdmin.from('leads')
+        .select('*').order('created_at', { ascending: false });
+      data = (rows||[]).map(r => ({
+        'Nombre': r.nombre,
+        'Email': r.email,
+        'Teléfono': r.telefono || '—',
+        'Auto de interés': r.auto_interes || '—',
+        'Monto estimado': r.monto_estimado || '—',
+        'Canal': r.canal || '—',
+        'Estado': r.estado,
+        'Observaciones': r.observaciones || '—',
+        'Fecha': r.created_at?.split('T')[0] || '—',
+      }));
+      filename = 'leads_' + fecha + '.xlsx';
+
+    } else if (vista === 'vehiculos') {
+      const { data: rows } = await sbAdmin.from('vehiculos')
+        .select('*').order('created_at', { ascending: false });
+      data = (rows||[]).map(r => ({
+        'Marca': r.marca,
+        'Modelo': r.modelo,
+        'Año': r.anio,
+        'VIN': r.vin,
+        'Patente': r.patente || '—',
+        'Color': r.color || '—',
+        'Precio USD': r.precio_usd,
+        'Estado': r.estado,
+      }));
+      filename = 'vehiculos_' + fecha + '.xlsx';
+    }
+
+    if (!data.length) { showToast('No hay datos para exportar'); return; }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, vista.charAt(0).toUpperCase() + vista.slice(1));
+
+    // Auto column widths
+    const cols = Object.keys(data[0]).map(k => ({ wch: Math.max(k.length, 12) }));
+    ws['!cols'] = cols;
+
+    XLSX.writeFile(wb, filename);
+    showToast('✓ Exportado: ' + filename);
+    await registrarLog('exportar_excel', 'Exportó ' + vista + ' a Excel (' + data.length + ' registros)');
+
+  } catch(e) {
+    showToast('Error al exportar: ' + e.message);
+  }
 }
 
 // INIT
