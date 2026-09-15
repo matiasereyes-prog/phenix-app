@@ -743,9 +743,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 // ══════════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://xxscdrwkoutlualpveif.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MDkyMTcsImV4cCI6MjEwNDk4NTIxN30.BNM3dg0jFTxjNuhlJPLAjMcGBv1ZbkmLOMm_A9wOk68';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTQwOTIxNywiZXhwIjoyMTA0OTg1MjE3fQ.3j1lk_btb_3jHCdqWV5MQN-99qUdn5G8Muo-j6bYLQk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const sbAdmin = supabase.createClient(SUPABASE_URL, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4c2Nkcndrb3V0bHVhbHB2ZWlmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTQwOTIxNywiZXhwIjoyMTA0OTg1MjE3fQ.3j1lk_btb_3jHCdqWV5MQN-99qUdn5G8Muo-j6bYLQk', {
-  auth: { autoRefreshToken: false, persistSession: false }
+const sbAdmin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false, storageKey: 'sb-admin-session' }
 });
 
 let currentUser = null;
@@ -1285,6 +1286,16 @@ async function crearUsuario() {
   document.getElementById('crear-usuario-spinner').style.display = 'inline-block';
 
   try {
+    // 0. Verificar si el email ya existe
+    const { data: existente } = await sbAdmin.from('usuarios').select('id,email').eq('email', email).single();
+    if (existente) {
+      document.getElementById('nu-msg').innerHTML = `<div class="alert alert-error">⚠️ El email <strong>${email}</strong> ya está registrado en el sistema.</div>`;
+      document.getElementById('btn-crear-usuario').disabled = false;
+      document.getElementById('crear-usuario-text').style.display = 'inline';
+      document.getElementById('crear-usuario-spinner').style.display = 'none';
+      return;
+    }
+
     // 1. Crear usuario en Supabase Auth via Admin API
     const redirectTo = rol === 'lessee' 
       ? 'https://portal.phenixleasing.com' 
