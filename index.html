@@ -3255,9 +3255,11 @@ async function importarCuotasExcel(input) {
     // Si el header no matchea, usamos posición fija.
 
     // Detectar índices por nombre de columna
-    const norm = s => String(s || '').toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9 ]/g, '').trim();
+        const norm = s => {
+      const str = String(s || '').toLowerCase();
+      const map = {'á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n','ü':'u','°':''};
+      return str.split('').map(c => map[c] || c).join('').replace(/[^a-z0-9 ]/g, '').trim();
+    };
 
     const hdr = rows[0].map(norm);
 
