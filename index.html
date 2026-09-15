@@ -947,8 +947,16 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="ld-panel-liquidacion" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <span style="font-size:13px;font-weight:600;color:var(--text2)">Cuadro de amortización</span>
-        <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+        <div style="display:flex;gap:8px">
+          <label class="btn btn-outline btn-sm" style="cursor:pointer">
+            ⬆ Importar Excel
+            <input type="file" id="import-excel-cuotas" accept=".xlsx,.xls" style="display:none" onchange="importarCuotasExcel(this)"/>
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="abrirAgregarAdicional()">+ Adicional</button>
+          <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+        </div>
       </div>
+      <div id="import-excel-msg" style="margin-bottom:8px"></div>
       <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
         <table class="data-table" id="table-liquidacion">
           <thead style="position:sticky;top:0">
@@ -958,7 +966,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
               <th>Cuota</th>
               <th>Capital</th>
               <th>Interés</th>
-              <th>IVA</th>
+              <th>Seguro</th>
+              <th>Adicionales</th>
+              <th>Total</th>
               <th>Saldo</th>
               <th>Estado</th>
             </tr>
@@ -1115,6 +1125,44 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-nuevo-seguro')">Cancelar</button>
       <button class="btn btn-dark" onclick="crearSeguro()">Guardar póliza</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: NUEVO ADICIONAL ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-adicional">
+  <div class="modal-card" style="max-width:480px">
+    <div class="modal-title">Agregar adicional a cuota</div>
+    <div class="modal-subtitle">Podés agregar seguro, multa, gasto u otro concepto a una cuota específica.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">N° de cuota</label>
+        <input class="form-input" type="number" id="ad-cuota-num" placeholder="1" min="1"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="ad-tipo">
+          <option value="seguro">🛡️ Seguro</option>
+          <option value="multa">⚠️ Multa</option>
+          <option value="gasto">📋 Gasto administrativo</option>
+          <option value="otro">📌 Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Concepto</label>
+        <input class="form-input" id="ad-concepto" placeholder="Ej: Seguro semestral Zurich"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Monto</label>
+        <input class="form-input" type="number" id="ad-monto" placeholder="0.00"/>
+      </div>
+    </div>
+    <div id="ad-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-adicional')">Cancelar</button>
+      <button class="btn btn-dark" onclick="guardarAdicional()">Agregar</button>
     </div>
   </div>
 </div>
@@ -1470,29 +1518,33 @@ async function loadLiquidacion() {
 
   const tbody = document.getElementById('tbody-liquidacion');
   if (!cuotas || !cuotas.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
     return;
   }
 
   const estadoColors = { paga: 'badge-green', pendiente: 'badge-gray', vencida: 'badge-red' };
   let html = '';
   cuotas.forEach(c => {
+    const total = c.total_con_adicionales || (parseFloat(c.monto||0) + parseFloat(c.seguro||0) + parseFloat(c.adicionales_monto||0));
     html += '<tr>';
     html += '<td class="mono">' + String(c.numero).padStart(2,'0') + '</td>';
     html += '<td class="mono">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
-    html += '<td class="bold">USD ' + Number(c.monto).toLocaleString('es-AR') + '</td>';
-    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? 'USD ' + Number(c.capital).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? 'USD ' + Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="mono" style="color:var(--text3)">' + (c.iva ? 'USD ' + Number(c.iva).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="mono">' + (c.saldo_restante ? 'USD ' + Number(c.saldo_restante).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="bold">' + Number(c.monto||0).toLocaleString('es-AR') + '</td>';
+    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? Number(c.capital).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--green)">' + (c.seguro ? Number(c.seguro).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--yellow)">' + (c.adicionales_monto ? Number(c.adicionales_monto).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="bold">' + Number(total).toLocaleString('es-AR') + '</td>';
+    html += '<td class="mono">' + (c.saldo_restante ? Number(c.saldo_restante).toLocaleString('es-AR') : '—') + '</td>';
     html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '">' + c.estado + '</div></td>';
     html += '</tr>';
     if (c.estado === 'paga' && c.fecha_pago) {
-      html += '<tr style="background:#f0fdf4"><td colspan="8" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
+      html += '<tr style="background:#f0fdf4"><td colspan="10" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
     }
   });
   tbody.innerHTML = html;
 }
+
 
 async function exportarLiquidacion() {
   const { data: cuotas } = await sbAdmin.from('cuotas').select('*').eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
@@ -2900,6 +2952,179 @@ async function crearVehiculoInline() {
   ['marca','modelo','anio','vin','patente','precio'].forEach(f => {
     document.getElementById('veh-inline-' + f).value = '';
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// IMPORTAR CUOTAS DESDE EXCEL
+// ══════════════════════════════════════════════════════════════════
+async function importarCuotasExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById('import-excel-msg');
+  msgEl.innerHTML = '<div class="alert alert-warning">Procesando archivo...</div>';
+
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+
+    // Buscar hoja de devengamiento primero, si no la primera
+    let sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('deveng') || n.toLowerCase().includes('liquidac') || n.toLowerCase().includes('cuota'));
+    if (!sheetName) sheetName = wb.SheetNames[0];
+    
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Detectar filas con datos de cuotas (número, fecha, monto, capital, interes, saldo)
+    const cuotasData = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      // Buscar filas donde la primera columna sea un número de cuota
+      const num = parseInt(row[0]);
+      if (!isNaN(num) && num > 0 && num <= 360) {
+        // Intentar parsear fecha y montos
+        const fecha = row[1] ? excelDateToString(row[1]) : null;
+        const monto = parseFloat(row[2] || row[3]) || null;
+        const capital = parseFloat(row[4] || row[6]) || null;  // col D o G
+        const interes = parseFloat(row[5] || row[5]) || null;  // col E o F
+        const saldo = parseFloat(row[6] || row[7]) || null;
+
+        if (monto || capital) {
+          cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, saldo_restante: saldo });
+        }
+      }
+    }
+
+    if (!cuotasData.length) {
+      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron datos de cuotas en el archivo. Verificá que el Excel tenga columnas: N°, Fecha, Cuota, Capital, Interés, Saldo.</div>';
+      return;
+    }
+
+    // Confirmar con el usuario
+    if (!confirm('Se encontraron ' + cuotasData.length + ' cuotas. ¿Actualizar el cuadro de amortización?')) {
+      input.value = '';
+      msgEl.innerHTML = '';
+      return;
+    }
+
+    // Obtener cuotas existentes del contrato
+    const { data: cuotasExistentes } = await sbAdmin.from('cuotas').select('id, numero').eq('contrato_id', currentLeaseId).order('numero');
+    
+    let updated = 0;
+    let inserted = 0;
+
+    for (const c of cuotasData) {
+      const existente = cuotasExistentes?.find(q => q.numero === c.numero);
+      const payload = {
+        contrato_id: currentLeaseId,
+        numero: c.numero,
+        fecha_vencimiento: c.fecha_vencimiento,
+        monto: c.monto,
+        capital: c.capital,
+        interes: c.interes,
+        saldo_restante: c.saldo_restante,
+        estado: 'pendiente'
+      };
+
+      if (existente) {
+        await sbAdmin.from('cuotas').update({ capital: c.capital, interes: c.interes, saldo_restante: c.saldo_restante, monto: c.monto || undefined, fecha_vencimiento: c.fecha_vencimiento || undefined }).eq('id', existente.id);
+        updated++;
+      } else {
+        await sbAdmin.from('cuotas').insert(payload);
+        inserted++;
+      }
+    }
+
+    msgEl.innerHTML = '<div class="alert alert-success">✓ ' + updated + ' cuotas actualizadas, ' + inserted + ' creadas.</div>';
+    input.value = '';
+    loadLiquidacion();
+    await registrarLog('importar_cuotas', 'Importó cuadro de amortización desde Excel (' + cuotasData.length + ' cuotas) para lease ' + currentLeaseId);
+
+  } catch(e) {
+    msgEl.innerHTML = '<div class="alert alert-error">Error al procesar: ' + e.message + '</div>';
+  }
+}
+
+function excelDateToString(val) {
+  if (!val) return null;
+  if (typeof val === 'string' && val.includes('-')) return val;
+  if (typeof val === 'string' && val.includes('/')) {
+    const parts = val.split('/');
+    if (parts.length === 3) return parts[2] + '-' + parts[1].padStart(2,'0') + '-' + parts[0].padStart(2,'0');
+  }
+  // Excel serial date
+  if (typeof val === 'number') {
+    const date = new Date((val - 25569) * 86400 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ADICIONALES DE CUOTA
+// ══════════════════════════════════════════════════════════════════
+function abrirAgregarAdicional() {
+  document.getElementById('ad-cuota-num').value = '';
+  document.getElementById('ad-concepto').value = '';
+  document.getElementById('ad-monto').value = '';
+  document.getElementById('ad-tipo').value = 'seguro';
+  document.getElementById('ad-msg').innerHTML = '';
+  openModal('modal-nuevo-adicional');
+}
+
+async function guardarAdicional() {
+  const numCuota = parseInt(document.getElementById('ad-cuota-num').value);
+  const tipo = document.getElementById('ad-tipo').value;
+  const concepto = document.getElementById('ad-concepto').value.trim();
+  const monto = parseFloat(document.getElementById('ad-monto').value);
+
+  if (!numCuota || !concepto || !monto) {
+    document.getElementById('ad-msg').innerHTML = '<div class="alert alert-error">Completá todos los campos.</div>';
+    return;
+  }
+
+  // Buscar la cuota correspondiente
+  const { data: cuota } = await sbAdmin.from('cuotas')
+    .select('id, monto, seguro, adicionales_monto')
+    .eq('contrato_id', currentLeaseId)
+    .eq('numero', numCuota)
+    .maybeSingle();
+
+  if (!cuota) {
+    document.getElementById('ad-msg').innerHTML = '<div class="alert alert-error">No se encontró la cuota N° ' + numCuota + '.</div>';
+    return;
+  }
+
+  // Insertar en adicionales_cuota
+  const { error } = await sbAdmin.from('adicionales_cuota').insert({
+    cuota_id: cuota.id,
+    concepto,
+    monto,
+    tipo
+  });
+
+  if (error) {
+    document.getElementById('ad-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  // Si es seguro, actualizar campo seguro en cuota
+  if (tipo === 'seguro') {
+    const nuevoSeguro = (parseFloat(cuota.seguro) || 0) + monto;
+    await sbAdmin.from('cuotas').update({ seguro: nuevoSeguro }).eq('id', cuota.id);
+  }
+
+  // Actualizar total con adicionales
+  const { data: todos } = await sbAdmin.from('adicionales_cuota').select('monto').eq('cuota_id', cuota.id);
+  const totalAdicionales = (todos || []).reduce((sum, a) => sum + parseFloat(a.monto), 0);
+  await sbAdmin.from('cuotas').update({
+    adicionales_monto: totalAdicionales,
+    total_con_adicionales: (parseFloat(cuota.monto) || 0) + totalAdicionales
+  }).eq('id', cuota.id);
+
+  showToast('✓ Adicional agregado a cuota N° ' + numCuota);
+  closeModal('modal-nuevo-adicional');
+  loadLiquidacion();
+  await registrarLog('agregar_adicional', 'Agregó ' + tipo + ' de $' + monto + ' a cuota #' + numCuota);
 }
 
 // INIT
