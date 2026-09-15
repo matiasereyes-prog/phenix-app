@@ -821,7 +821,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
 <!-- ══ MODAL: DETALLE LEASING COMPLETO ══════════════════════════ -->
 <div class="modal-overlay" id="modal-lease-detail">
-  <div class="modal-card" style="max-width:680px">
+  <div class="modal-card" style="max-width:960px;width:95vw">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
       <div>
         <div class="modal-title" id="ld-titulo">Detalle del leasing</div>
@@ -1684,36 +1684,56 @@ async function loadLiquidacion() {
 
   const tbody = document.getElementById('tbody-liquidacion');
   if (!cuotas || !cuotas.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
     return;
   }
 
   const estadoColors = { paga: 'badge-green', pendiente: 'badge-gray', vencida: 'badge-red' };
   let html = '';
   cuotas.forEach(c => {
-    const total = c.total_con_adicionales || (parseFloat(c.monto||0) + parseFloat(c.seguro||0) + parseFloat(c.adicionales_monto||0));
-    html += '<tr>';
-    html += '<td class="mono">' + String(c.numero).padStart(2,'0') + '</td>';
-    html += '<td class="mono">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
-    html += '<td class="bold">' + Number(c.monto||0).toLocaleString('es-AR') + '</td>';
-    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? Number(c.capital).toLocaleString('es-AR') : '—') + '</td>'; // Amortizacion
-    html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="mono" style="color:var(--green)">' + (c.seguro ? Number(c.seguro).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="mono" style="color:var(--yellow)">' + (c.adicionales_monto ? Number(c.adicionales_monto).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td class="bold">' + Number(total).toLocaleString('es-AR') + '</td>';
-    html += '<td class="mono">' + (c.saldo_restante ? Number(c.saldo_restante).toLocaleString('es-AR') : '—') + '</td>';
-    html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '">' + c.estado + '</div></td>';
-    if (c.estado !== 'paga') {
-      html += '<td><button onclick="abrirMarcarPaga(\'' + c.id + '\', ' + c.numero + ')" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">✓ Pagar</button></td>';
+    const cuotaBase = parseFloat(c.monto || 0);
+    const amort = parseFloat(c.capital || 0);
+    const interes = parseFloat(c.interes || 0);
+    const iva = parseFloat(c.iva || 0);
+    const seguro = parseFloat(c.seguro || 0);
+    const adicion = parseFloat(c.adicionales_monto || 0);
+    const total = c.total_con_adicionales || (cuotaBase + seguro + adicion);
+    const saldo = parseFloat(c.saldo_restante || 0);
+    const isPaga = c.estado === 'paga';
+
+    const fmt = n => n ? n.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+
+    html += '<tr style="' + (isPaga ? 'background:#f0fdf4' : '') + '">';
+    html += '<td class="mono" style="font-size:11px;padding:6px 8px">' + String(c.numero).padStart(2,'0') + '</td>';
+    html += '<td class="mono" style="font-size:11px;padding:6px 8px;white-space:nowrap">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;font-weight:700;font-family:var(--mono)">' + fmt(cuotaBase) + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;color:var(--blue);font-family:var(--mono)">' + fmt(amort) + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;color:var(--orange);font-family:var(--mono)">' + fmt(interes) + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;color:var(--text3);font-family:var(--mono)">' + (iva ? fmt(iva) : '—') + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;color:var(--green);font-family:var(--mono)">' + (seguro ? fmt(seguro) : '—') + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;color:#a855f7;font-family:var(--mono)">' + (adicion ? fmt(adicion) : '—') + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;font-weight:800;font-family:var(--mono)">' + fmt(total) + '</td>';
+    html += '<td style="font-size:11px;padding:6px 8px;font-family:var(--mono)">' + (saldo ? fmt(saldo) : '—') + '</td>';
+    html += '<td style="padding:6px 8px"><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '" style="font-size:10px">' + c.estado + '</div></td>';
+    if (!isPaga) {
+      html += '<td style="padding:6px 8px"><button onclick="abrirMarcarPaga_' + c.id.replace(/-/g,'') + '()" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap" id="btn-pagar-' + c.id.replace(/-/g,'') + '">✓ Pagar</button></td>';
     } else {
-      html += '<td></td>';
+      html += '<td style="font-size:10px;color:var(--green);padding:6px 8px">' + (c.fecha_pago ? formatFecha(c.fecha_pago) : '✓') + '</td>';
     }
     html += '</tr>';
-    if (c.estado === 'paga' && c.fecha_pago) {
-      html += '<tr style="background:#f0fdf4"><td colspan="11" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
+    if (isPaga && c.fecha_pago) {
+      html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
     }
   });
   tbody.innerHTML = html;
+
+  // Attach click handlers after render (avoids quote escaping issues)
+  cuotas.forEach(c => {
+    if (c.estado !== 'paga') {
+      const btn = document.getElementById('btn-pagar-' + c.id.replace(/-/g,''));
+      if (btn) btn.onclick = () => abrirMarcarPaga(c.id, c.numero);
+    }
+  });
 }
 
 
