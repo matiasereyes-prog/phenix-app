@@ -458,9 +458,51 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="form-section">Vehículo</div>
     <div class="form-group">
       <label class="form-label">Seleccionar vehículo</label>
-      <select class="form-select" id="nl-vehiculo">
-        <option value="">Cargando vehículos...</option>
-      </select>
+      <div style="display:flex;gap:8px">
+        <select class="form-select" id="nl-vehiculo" style="flex:1">
+          <option value="">Cargando vehículos...</option>
+        </select>
+        <button type="button" class="btn btn-outline btn-sm" onclick="toggleVehiculoInline()" style="white-space:nowrap">+ Nuevo</button>
+      </div>
+      <!-- Formulario inline para nuevo vehiculo -->
+      <div id="vehiculo-inline-form" style="display:none;background:var(--gray);border-radius:10px;padding:14px;margin-top:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Nuevo vehículo</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Marca</label>
+            <input class="form-input" id="veh-inline-marca" placeholder="Toyota"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Modelo</label>
+            <input class="form-input" id="veh-inline-modelo" placeholder="GR86"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Año</label>
+            <input class="form-input" type="number" id="veh-inline-anio" placeholder="2026"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">VIN</label>
+            <input class="form-input" id="veh-inline-vin" placeholder="JF1ZD4HF6P8000001"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Patente</label>
+            <input class="form-input" id="veh-inline-patente" placeholder="AA 123 BB"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Precio (USD)</label>
+            <input class="form-input" type="number" id="veh-inline-precio" placeholder="35000"/>
+          </div>
+        </div>
+        <div id="veh-inline-msg"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-outline btn-sm" onclick="toggleVehiculoInline()">Cancelar</button>
+          <button class="btn btn-dark btn-sm" onclick="crearVehiculoInline()">Crear y seleccionar</button>
+        </div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -766,6 +808,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-detalle-lead')">Cerrar</button>
+      <button class="btn btn-outline" id="btn-convertir-lead" onclick="convertirLeadACliente()" style="color:var(--green);border-color:var(--green)">✓ Convertir a cliente</button>
       <button class="btn btn-dark" onclick="actualizarLead()">Guardar cambios</button>
     </div>
     <div id="lead-msg" style="margin-top:10px"></div>
@@ -2722,6 +2765,137 @@ async function cargarVehiculosEnSeguroModal() {
 }
 
 // Add to seguros excel export
+// ══════════════════════════════════════════════════════════════════
+// CONVERTIR LEAD A CLIENTE
+// ══════════════════════════════════════════════════════════════════
+async function convertirLeadACliente() {
+  const btn = document.getElementById('btn-convertir-lead');
+  const { data: lead } = await sbAdmin.from('leads').select('*').eq('id', currentLeadId).single();
+  if (!lead) return;
+
+  if (lead.estado === 'convertido') {
+    showToast('Este lead ya fue convertido a cliente');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Convirtiendo...';
+
+  try {
+    // Verificar si ya existe como usuario
+    const { data: usuarioExistente } = await sbAdmin.from('usuarios')
+      .select('id, rol').eq('email', lead.email).maybeSingle();
+
+    if (usuarioExistente) {
+      // Ya existe — solo actualizar rol si no es lessee
+      if (usuarioExistente.rol !== 'lessee') {
+        await sbAdmin.from('usuarios').update({ rol: 'lessee' }).eq('id', usuarioExistente.id);
+      }
+    } else {
+      // Crear nuevo usuario via Edge Function
+      await edgeUsers('create_user', {
+        email: lead.email,
+        nombre: lead.nombre,
+        rol: 'lessee',
+        tipo: 'fisica',
+        telefono: lead.telefono || null,
+        redirectTo: 'https://portal.phenixleasing.com'
+      });
+    }
+
+    // Marcar lead como convertido
+    await sbAdmin.from('leads').update({ estado: 'convertido' }).eq('id', currentLeadId);
+
+    // Registrar en historial
+    await sbAdmin.from('leads_historial').insert({
+      lead_id: currentLeadId,
+      tipo: 'nota',
+      resultado: 'contactado',
+      descripcion: 'Lead convertido a cliente. Se envió magic link de bienvenida.',
+      responsable: currentUser?.email || '—'
+    });
+
+    await registrarLog('convertir_lead', 'Convirtió lead ' + lead.email + ' a cliente');
+    showToast('✓ Cliente creado y magic link enviado a ' + lead.email);
+
+    // Cerrar modal lead y abrir modal leasing con datos precargados
+    closeModal('modal-detalle-lead');
+    setTimeout(() => {
+      openModal('modal-nuevo-lease');
+      document.getElementById('nl-cliente-email').value = lead.email;
+      if (lead.auto_interes) {
+        // Precargar descripción del vehículo de interés
+        document.getElementById('nl-vin').value = '';
+      }
+      buscarCliente();
+    }, 500);
+
+    loadLeads();
+    loadLeadsStats();
+
+  } catch(e) {
+    showToast('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '✓ Convertir a cliente';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VEHÍCULO INLINE EN MODAL LEASING
+// ══════════════════════════════════════════════════════════════════
+function toggleVehiculoInline() {
+  const form = document.getElementById('vehiculo-inline-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  if (form.style.display === 'block') {
+    document.getElementById('veh-inline-marca').focus();
+  }
+}
+
+async function crearVehiculoInline() {
+  const marca = document.getElementById('veh-inline-marca').value.trim();
+  const modelo = document.getElementById('veh-inline-modelo').value.trim();
+  const anio = document.getElementById('veh-inline-anio').value;
+  const vin = document.getElementById('veh-inline-vin').value.trim();
+  const patente = document.getElementById('veh-inline-patente').value.trim();
+  const precio = document.getElementById('veh-inline-precio').value;
+
+  if (!marca || !modelo || !vin) {
+    document.getElementById('veh-inline-msg').innerHTML = '<div class="alert alert-error">Marca, modelo y VIN son obligatorios.</div>';
+    return;
+  }
+
+  const { data, error } = await sbAdmin.from('vehiculos').insert({
+    marca, modelo,
+    anio: parseInt(anio) || new Date().getFullYear(),
+    vin, patente: patente || null,
+    precio_usd: parseFloat(precio) || null,
+    estado: 'disponible',
+    flota_propia: true
+  }).select().single();
+
+  if (error) {
+    document.getElementById('veh-inline-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  // Agregar al select y seleccionarlo
+  const sel = document.getElementById('nl-vehiculo');
+  const opt = document.createElement('option');
+  opt.value = data.id;
+  opt.textContent = marca + ' ' + modelo + ' ' + (anio || '') + (patente ? ' · ' + patente : '');
+  opt.selected = true;
+  sel.appendChild(opt);
+
+  showToast('✓ Vehículo creado y seleccionado');
+  toggleVehiculoInline();
+  document.getElementById('veh-inline-msg').innerHTML = '';
+
+  // Limpiar campos
+  ['marca','modelo','anio','vin','patente','precio'].forEach(f => {
+    document.getElementById('veh-inline-' + f).value = '';
+  });
+}
+
 // INIT
 checkSession();
 </script>
