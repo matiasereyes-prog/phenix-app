@@ -653,6 +653,38 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <option value="rechazado">Rechazado</option>
       </select>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Responsable</label>
+        <input class="form-input" id="lead-responsable" placeholder="Nombre del ejecutivo"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha próximo contacto</label>
+        <input class="form-input" type="date" id="lead-fecha-contacto"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Red de origen</label>
+        <select class="form-select" id="lead-red-origen">
+          <option value="">—</option>
+          <option value="instagram">Instagram</option>
+          <option value="facebook">Facebook</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="referido">Referido</option>
+          <option value="directo">Directo</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Campaña / Anuncio</label>
+        <input class="form-input" id="lead-campana" placeholder="Reel leasing pickup..."/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Próxima acción</label>
+      <input class="form-input" id="lead-proxima-accion" placeholder="Llamar para confirmar..."/>
+    </div>
     <div class="form-group">
       <label class="form-label">Observaciones</label>
       <input class="form-input" id="lead-observaciones" placeholder="Notas internas..."/>
@@ -768,17 +800,70 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div id="ld-blockchain-msg" style="margin-top:8px"></div>
     </div>
 
-    <!-- Cambiar estado -->
-    <div style="display:flex;gap:10px;margin-top:4px">
-      <select class="form-select" id="ld-nuevo-estado" style="flex:1">
-        <option value="borrador">Borrador</option>
-        <option value="activo">Activo</option>
-        <option value="completado">Completado</option>
-        <option value="cancelado">Cancelado</option>
-        <option value="disputado">Disputado</option>
-      </select>
-      <button class="btn btn-dark" onclick="actualizarEstadoLease()">Guardar estado</button>
+    <!-- Tabs cuadro liquidacion -->
+    <div style="display:flex;gap:0;border-bottom:1.5px solid var(--border);margin-bottom:16px">
+      <button onclick="switchLDTab('resumen')" id="ld-tab-resumen" class="nav-btn active" style="border-radius:0;border-bottom:2px solid var(--black);padding:10px 16px;font-size:13px">Resumen</button>
+      <button onclick="switchLDTab('liquidacion')" id="ld-tab-liquidacion" class="nav-btn" style="border-radius:0;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px">Cuadro de liquidación</button>
+      <button onclick="switchLDTab('estado')" id="ld-tab-estado" class="nav-btn" style="border-radius:0;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px">Estado</button>
     </div>
+
+    <!-- Panel resumen -->
+    <div id="ld-panel-resumen">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Valor contrato</div>
+          <div style="font-size:18px;font-weight:800;color:var(--black);font-family:var(--mono)" id="ld-valor-contrato">—</div>
+        </div>
+        <div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Canon mensual</div>
+          <div style="font-size:18px;font-weight:800;color:var(--black);font-family:var(--mono)" id="ld-canon-resumen">—</div>
+        </div>
+        <div style="background:var(--gray);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Opción de compra</div>
+          <div style="font-size:18px;font-weight:800;color:var(--orange);font-family:var(--mono)" id="ld-opcion-resumen">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel liquidacion -->
+    <div id="ld-panel-liquidacion" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:13px;font-weight:600;color:var(--text2)">Cuadro de amortización</span>
+        <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+      </div>
+      <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+        <table class="data-table" id="table-liquidacion">
+          <thead style="position:sticky;top:0">
+            <tr>
+              <th>#</th>
+              <th>Vencimiento</th>
+              <th>Cuota</th>
+              <th>Capital</th>
+              <th>Interés</th>
+              <th>IVA</th>
+              <th>Saldo</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-liquidacion"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Panel estado -->
+    <div id="ld-panel-estado" style="display:none">
+      <div style="display:flex;gap:10px">
+        <select class="form-select" id="ld-nuevo-estado" style="flex:1">
+          <option value="borrador">Borrador</option>
+          <option value="activo">Activo</option>
+          <option value="completado">Completado</option>
+          <option value="cancelado">Cancelado</option>
+          <option value="disputado">Disputado</option>
+        </select>
+        <button class="btn btn-dark" onclick="actualizarEstadoLease()">Guardar estado</button>
+      </div>
+    </div>
+
     <div id="ld-msg" style="margin-top:10px"></div>
   </div>
 </div>
@@ -1047,6 +1132,10 @@ async function abrirDetalleLease(id) {
   document.getElementById('ld-cuotas-vencidas').textContent = `${vencidas} vencidas`;
   document.getElementById('ld-cuotas-pendientes').textContent = `${pendientes} pendientes`;
   document.getElementById('ld-nuevo-estado').value = l.estado;
+  document.getElementById('ld-valor-contrato').textContent = l.moneda + ' ' + Number(l.canon_mensual * l.plazo_meses).toLocaleString('es-AR');
+  document.getElementById('ld-canon-resumen').textContent = l.moneda + ' ' + Number(l.canon_mensual).toLocaleString('es-AR');
+  document.getElementById('ld-opcion-resumen').textContent = l.opcion_compra ? l.moneda + ' ' + Number(l.opcion_compra).toLocaleString('es-AR') : '—';
+  switchLDTab('resumen');
 
   document.getElementById('ld-grid').innerHTML = [
     ['Cliente', l.usuarios?.nombre || '—'],
@@ -1109,6 +1198,75 @@ async function abrirDetalleLease(id) {
   }
 
   openModal('modal-lease-detail');
+}
+
+function switchLDTab(tab) {
+  ['resumen', 'liquidacion', 'estado'].forEach(t => {
+    document.getElementById('ld-panel-' + t).style.display = t === tab ? 'block' : 'none';
+    const btn = document.getElementById('ld-tab-' + t);
+    btn.classList.toggle('active', t === tab);
+    btn.style.borderBottom = t === tab ? '2px solid var(--black)' : '2px solid transparent';
+    btn.style.color = t === tab ? 'var(--black)' : '';
+  });
+  if (tab === 'liquidacion') loadLiquidacion();
+}
+
+async function loadLiquidacion() {
+  const { data: cuotas } = await sbAdmin.from('cuotas')
+    .select('*')
+    .eq('contrato_id', currentLeaseId)
+    .order('numero', { ascending: true });
+
+  const tbody = document.getElementById('tbody-liquidacion');
+  if (!cuotas || !cuotas.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
+    return;
+  }
+
+  const estadoColors = { paga: 'badge-green', pendiente: 'badge-gray', vencida: 'badge-red' };
+  let html = '';
+  cuotas.forEach(c => {
+    html += '<tr>';
+    html += '<td class="mono">' + String(c.numero).padStart(2,'0') + '</td>';
+    html += '<td class="mono">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
+    html += '<td class="bold">USD ' + Number(c.monto).toLocaleString('es-AR') + '</td>';
+    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? 'USD ' + Number(c.capital).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? 'USD ' + Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--text3)">' + (c.iva ? 'USD ' + Number(c.iva).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono">' + (c.saldo_restante ? 'USD ' + Number(c.saldo_restante).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '">' + c.estado + '</div></td>';
+    html += '</tr>';
+    if (c.estado === 'paga' && c.fecha_pago) {
+      html += '<tr style="background:#f0fdf4"><td colspan="8" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+async function exportarLiquidacion() {
+  const { data: cuotas } = await sbAdmin.from('cuotas').select('*').eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
+  const { data: l } = await sbAdmin.from('contratos').select('*, usuarios!contratos_usuario_id_fkey(nombre), vehiculos(marca,modelo,anio)').eq('id', currentLeaseId).single();
+  
+  const data = (cuotas||[]).map(c => ({
+    'N° Cuota': c.numero,
+    'Vencimiento': c.fecha_vencimiento || '—',
+    'Cuota (USD)': c.monto,
+    'Capital (USD)': c.capital || '—',
+    'Interés (USD)': c.interes || '—',
+    'IVA (USD)': c.iva || '—',
+    'Saldo (USD)': c.saldo_restante || '—',
+    'Estado': c.estado,
+    'Fecha pago': c.fecha_pago || '—',
+    'Medio de pago': c.medio_pago || '—',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Liquidacion');
+  const cliente = l?.usuarios?.nombre || 'cliente';
+  const vehiculo = l?.vehiculos ? l.vehiculos.marca + '_' + l.vehiculos.modelo : 'vehiculo';
+  XLSX.writeFile(wb, 'liquidacion_' + cliente + '_' + vehiculo + '_' + new Date().toISOString().split('T')[0] + '.xlsx');
+  showToast('✓ Liquidación exportada');
 }
 
 async function actualizarEstadoLease() {
@@ -1192,6 +1350,75 @@ async function ejecutarDisputaInline() {
   }
 }
 
+
+function switchLDTab(tab) {
+  ['resumen', 'liquidacion', 'estado'].forEach(t => {
+    document.getElementById('ld-panel-' + t).style.display = t === tab ? 'block' : 'none';
+    const btn = document.getElementById('ld-tab-' + t);
+    btn.classList.toggle('active', t === tab);
+    btn.style.borderBottom = t === tab ? '2px solid var(--black)' : '2px solid transparent';
+    btn.style.color = t === tab ? 'var(--black)' : '';
+  });
+  if (tab === 'liquidacion') loadLiquidacion();
+}
+
+async function loadLiquidacion() {
+  const { data: cuotas } = await sbAdmin.from('cuotas')
+    .select('*')
+    .eq('contrato_id', currentLeaseId)
+    .order('numero', { ascending: true });
+
+  const tbody = document.getElementById('tbody-liquidacion');
+  if (!cuotas || !cuotas.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas</td></tr>';
+    return;
+  }
+
+  const estadoColors = { paga: 'badge-green', pendiente: 'badge-gray', vencida: 'badge-red' };
+  let html = '';
+  cuotas.forEach(c => {
+    html += '<tr>';
+    html += '<td class="mono">' + String(c.numero).padStart(2,'0') + '</td>';
+    html += '<td class="mono">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
+    html += '<td class="bold">USD ' + Number(c.monto).toLocaleString('es-AR') + '</td>';
+    html += '<td class="mono" style="color:var(--blue)">' + (c.capital ? 'USD ' + Number(c.capital).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--orange)">' + (c.interes ? 'USD ' + Number(c.interes).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono" style="color:var(--text3)">' + (c.iva ? 'USD ' + Number(c.iva).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono">' + (c.saldo_restante ? 'USD ' + Number(c.saldo_restante).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '">' + c.estado + '</div></td>';
+    html += '</tr>';
+    if (c.estado === 'paga' && c.fecha_pago) {
+      html += '<tr style="background:#f0fdf4"><td colspan="8" style="font-size:11px;color:var(--green);padding:4px 14px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+async function exportarLiquidacion() {
+  const { data: cuotas } = await sbAdmin.from('cuotas').select('*').eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
+  const { data: l } = await sbAdmin.from('contratos').select('*, usuarios!contratos_usuario_id_fkey(nombre), vehiculos(marca,modelo,anio)').eq('id', currentLeaseId).single();
+  
+  const data = (cuotas||[]).map(c => ({
+    'N° Cuota': c.numero,
+    'Vencimiento': c.fecha_vencimiento || '—',
+    'Cuota (USD)': c.monto,
+    'Capital (USD)': c.capital || '—',
+    'Interés (USD)': c.interes || '—',
+    'IVA (USD)': c.iva || '—',
+    'Saldo (USD)': c.saldo_restante || '—',
+    'Estado': c.estado,
+    'Fecha pago': c.fecha_pago || '—',
+    'Medio de pago': c.medio_pago || '—',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Liquidacion');
+  const cliente = l?.usuarios?.nombre || 'cliente';
+  const vehiculo = l?.vehiculos ? l.vehiculos.marca + '_' + l.vehiculos.modelo : 'vehiculo';
+  XLSX.writeFile(wb, 'liquidacion_' + cliente + '_' + vehiculo + '_' + new Date().toISOString().split('T')[0] + '.xlsx');
+  showToast('✓ Liquidación exportada');
+}
 
 async function actualizarEstadoLease() {
   const estado = document.getElementById('ld-nuevo-estado').value;
@@ -1548,6 +1775,11 @@ function abrirDetalleLead(id) {
   document.getElementById('lead-titulo').textContent = l.nombre;
   document.getElementById('lead-nuevo-estado').value = l.estado;
   document.getElementById('lead-observaciones').value = l.observaciones || '';
+  document.getElementById('lead-responsable').value = l.responsable || '';
+  document.getElementById('lead-fecha-contacto').value = l.fecha_proxima_accion || '';
+  document.getElementById('lead-red-origen').value = l.red_origen || '';
+  document.getElementById('lead-campana').value = l.campana || '';
+  document.getElementById('lead-proxima-accion').value = l.proxima_accion || '';
   document.getElementById('lead-grid').innerHTML = [
     ['Email', l.email], ['Teléfono', l.telefono||'—'],
     ['Auto de interés', l.auto_interes||'—'], ['Monto estimado', l.monto_estimado||'—'],
@@ -1559,7 +1791,12 @@ function abrirDetalleLead(id) {
 async function actualizarLead() {
   const estado = document.getElementById('lead-nuevo-estado').value;
   const observaciones = document.getElementById('lead-observaciones').value;
-  const { error } = await sbAdmin.from('leads').update({ estado, observaciones }).eq('id', currentLeadId);
+  const responsable = document.getElementById('lead-responsable').value;
+  const fecha_proxima_accion = document.getElementById('lead-fecha-contacto').value || null;
+  const red_origen = document.getElementById('lead-red-origen').value || null;
+  const campana = document.getElementById('lead-campana').value || null;
+  const proxima_accion = document.getElementById('lead-proxima-accion').value || null;
+  const { error } = await sbAdmin.from('leads').update({ estado, observaciones, responsable, fecha_proxima_accion, red_origen, campana, proxima_accion }).eq('id', currentLeadId);
   if (error) { document.getElementById('lead-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast('✓ Lead actualizado');
   closeModal('modal-detalle-lead');
