@@ -809,7 +809,7 @@ async function logout() {
 // ══════════════════════════════════════════════════════════════════
 async function loadApp() {
   // Verificar rol — solo admin y ejecutivo pueden acceder al backend
-  const { data: usuario } = await sb.from('usuarios').select('rol, nombre').eq('email', currentUser.email).single();
+  const { data: usuario } = await sbAdmin.from('usuarios').select('rol, nombre').eq('email', currentUser.email).single();
   
   if (!usuario || !['admin', 'ejecutivo'].includes(usuario.rol)) {
     await sb.auth.signOut();
@@ -877,7 +877,7 @@ async function loadDashboard() {
 // LEASINGS
 // ══════════════════════════════════════════════════════════════════
 async function loadLeasings() {
-  const { data } = await sb.from('contratos')
+  const { data } = await sbAdmin.from('contratos')
     .select('*, usuarios(nombre,email), vehiculos(marca,modelo,anio)')
     .order('created_at', { ascending: false });
   allLeasings = data || [];
@@ -918,10 +918,10 @@ function renderLeasingsTable(tbodyId, data, compact) {
 
 async function abrirDetalleLease(id) {
   currentLeaseId = id;
-  const { data: l } = await sb.from('contratos')
+  const { data: l } = await sbAdmin.from('contratos')
     .select('*, usuarios(nombre,email,telefono), vehiculos(marca,modelo,anio,vin,patente)')
     .eq('id', id).single();
-  const { data: cuotas } = await sb.from('cuotas').select('estado').eq('contrato_id', id);
+  const { data: cuotas } = await sbAdmin.from('cuotas').select('estado').eq('contrato_id', id);
   const pagas = (cuotas||[]).filter(c=>c.estado==='paga').length;
   const total = (cuotas||[]).length;
 
@@ -951,11 +951,11 @@ async function abrirDetalleLease(id) {
 
 async function editarEstadoLease() {
   const estados = ['borrador','activo','completado','cancelado','disputado'];
-  const { data: l } = await sb.from('contratos').select('estado').eq('id', currentLeaseId).single();
+  const { data: l } = await sbAdmin.from('contratos').select('estado').eq('id', currentLeaseId).single();
   const actual = l.estado;
   const nuevo = prompt(`Estado actual: ${actual}\nNuevo estado (${estados.join('/')}):`, actual);
   if (!nuevo || !estados.includes(nuevo) || nuevo === actual) return;
-  const { error } = await sb.from('contratos').update({ estado: nuevo }).eq('id', currentLeaseId);
+  const { error } = await sbAdmin.from('contratos').update({ estado: nuevo }).eq('id', currentLeaseId);
   if (error) { document.getElementById('det-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast(`✓ Estado actualizado a ${nuevo}`);
   closeModal('modal-detalle-lease');
@@ -974,7 +974,7 @@ function toggleEscrowFields() {
 async function buscarCliente() {
   const email = document.getElementById('nl-cliente-email').value.trim();
   if (!email) return;
-  const { data } = await sb.from('usuarios').select('id,nombre,tipo').eq('email', email).single();
+  const { data } = await sbAdmin.from('usuarios').select('id,nombre,tipo').eq('email', email).single();
   const el = document.getElementById('nl-cliente-info');
   if (data) {
     el.innerHTML = `<span style="color:var(--green);font-weight:600">✓ ${data.nombre} (${data.tipo})</span>`;
@@ -1007,9 +1007,9 @@ async function crearLease() {
 
   try {
     // Obtener o crear usuario
-    let { data: usuario } = await sb.from('usuarios').select('id').eq('email', email).single();
+    let { data: usuario } = await sbAdmin.from('usuarios').select('id').eq('email', email).single();
     if (!usuario) {
-      const { data: nuevoUsuario, error } = await sb.from('usuarios').insert({
+      const { data: nuevoUsuario, error } = await sbAdmin.from('usuarios').insert({
         email, nombre: email.split('@')[0], tipo: 'fisica', rol: 'lessee'
       }).select('id').single();
       if (error) throw error;
@@ -1044,7 +1044,7 @@ async function crearLease() {
       contratoData.escrow_bloqueado = contratoData.escrow_monto;
     }
 
-    const { data: contrato, error: errContrato } = await sb.from('contratos').insert(contratoData).select('id').single();
+    const { data: contrato, error: errContrato } = await sbAdmin.from('contratos').insert(contratoData).select('id').single();
     if (errContrato) throw errContrato;
 
     // Generar cuotas automáticamente
@@ -1060,7 +1060,7 @@ async function crearLease() {
           estado: 'pendiente'
         };
       });
-      await sb.from('cuotas').insert(cuotas);
+      await sbAdmin.from('cuotas').insert(cuotas);
     }
 
     showToast('✓ Leasing creado correctamente');
@@ -1080,7 +1080,7 @@ async function crearLease() {
 // CLIENTES
 // ══════════════════════════════════════════════════════════════════
 async function loadClientes() {
-  const { data } = await sb.from('usuarios').select('*, contratos(count)').in('rol',['lessee']).order('created_at',{ascending:false});
+  const { data } = await sbAdmin.from('usuarios').select('*, contratos(count)').in('rol',['lessee']).order('created_at',{ascending:false});
   const tbody = document.getElementById('tbody-clientes');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin clientes registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(c => `<tr>
@@ -1103,7 +1103,7 @@ async function crearCliente() {
   const cuit = document.getElementById('nc-cuit').value.trim();
   const wallet = document.getElementById('nc-wallet').value.trim();
   if (!nombre || !email) { document.getElementById('nc-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>'; return; }
-  const { error } = await sb.from('usuarios').insert({ nombre, email, tipo, telefono, cuit, wallet_address: wallet || null, rol:'lessee' });
+  const { error } = await sbAdmin.from('usuarios').insert({ nombre, email, tipo, telefono, cuit, wallet_address: wallet || null, rol:'lessee' });
   if (error) { document.getElementById('nc-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast('✓ Cliente creado');
   closeModal('modal-nuevo-cliente');
@@ -1114,7 +1114,7 @@ async function crearCliente() {
 // LEADS
 // ══════════════════════════════════════════════════════════════════
 async function loadLeads() {
-  const { data } = await sb.from('leads').select('*').order('created_at',{ascending:false});
+  const { data } = await sbAdmin.from('leads').select('*').order('created_at',{ascending:false});
   allLeads = data || [];
   renderLeadsTable(allLeads);
 }
@@ -1162,7 +1162,7 @@ function abrirDetalleLead(id) {
 async function actualizarLead() {
   const estado = document.getElementById('lead-nuevo-estado').value;
   const observaciones = document.getElementById('lead-observaciones').value;
-  const { error } = await sb.from('leads').update({ estado, observaciones }).eq('id', currentLeadId);
+  const { error } = await sbAdmin.from('leads').update({ estado, observaciones }).eq('id', currentLeadId);
   if (error) { document.getElementById('lead-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast('✓ Lead actualizado');
   closeModal('modal-detalle-lead');
@@ -1173,7 +1173,7 @@ async function actualizarLead() {
 // VEHICULOS
 // ══════════════════════════════════════════════════════════════════
 async function loadVehiculos() {
-  const { data } = await sb.from('vehiculos').select('*').order('created_at',{ascending:false});
+  const { data } = await sbAdmin.from('vehiculos').select('*').order('created_at',{ascending:false});
   const tbody = document.getElementById('tbody-vehiculos');
   if (tbody && data) {
     if (!data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-text">Sin vehículos registrados.</div></div></td></tr>`; }
@@ -1204,7 +1204,7 @@ async function crearVehiculo() {
   const color = document.getElementById('nv-color').value.trim();
   const estado = document.getElementById('nv-estado').value;
   if (!marca || !modelo || !vin || !precio) { document.getElementById('nv-msg').innerHTML = '<div class="alert alert-error">Completá los campos obligatorios.</div>'; return; }
-  const { error } = await sb.from('vehiculos').insert({ marca, modelo, anio: parseInt(anio), vin, patente, color, precio_usd: parseFloat(precio), estado });
+  const { error } = await sbAdmin.from('vehiculos').insert({ marca, modelo, anio: parseInt(anio), vin, patente, color, precio_usd: parseFloat(precio), estado });
   if (error) { document.getElementById('nv-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast('✓ Vehículo agregado');
   closeModal('modal-nuevo-vehiculo');
@@ -1250,7 +1250,7 @@ function showToast(msg) {
 // USUARIOS DEL SISTEMA
 // ══════════════════════════════════════════════════════════════════
 async function loadUsuarios() {
-  const { data } = await sb.from('usuarios').select('*').order('created_at', { ascending: false });
+  const { data } = await sbAdmin.from('usuarios').select('*').order('created_at', { ascending: false });
   const tbody = document.getElementById('tbody-usuarios');
   if (!data || !data.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Sin usuarios registrados.</div></div></td></tr>`;
@@ -1349,7 +1349,7 @@ async function cambiarRol(id, email, rolActual) {
   const nuevo = prompt(`Rol actual: ${rolActual}
 Nuevo rol (${roles.join('/')}):`);
   if (!nuevo || !roles.includes(nuevo) || nuevo === rolActual) return;
-  const { error } = await sb.from('usuarios').update({ rol: nuevo }).eq('id', id);
+  const { error } = await sbAdmin.from('usuarios').update({ rol: nuevo }).eq('id', id);
   if (error) { showToast('Error al cambiar el rol'); return; }
   await registrarLog('cambio_rol', `Cambió rol de ${email}: ${rolActual} → ${nuevo}`);
   showToast(`✓ Rol de ${email} actualizado a ${nuevo}`);
@@ -1368,7 +1368,7 @@ function rolBadge(rol) {
 async function registrarLog(accion, detalle) {
   if (!currentUser) return;
   try {
-    await sb.from('logs_acciones').insert({
+    await sbAdmin.from('logs_acciones').insert({
       usuario_email: currentUser.email,
       accion,
       detalle
@@ -1377,7 +1377,7 @@ async function registrarLog(accion, detalle) {
 }
 
 async function loadLogs() {
-  const { data } = await sb.from('logs_acciones').select('*').order('created_at', { ascending: false }).limit(100);
+  const { data } = await sbAdmin.from('logs_acciones').select('*').order('created_at', { ascending: false }).limit(100);
   const tbody = document.getElementById('tbody-logs');
   if (!data || !data.length) {
     tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin actividad registrada.</div></div></td></tr>`;
