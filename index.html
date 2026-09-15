@@ -212,6 +212,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('clientes')">Clientes</button>
         <button class="nav-btn" onclick="showView('leads')">Leads</button>
         <button class="nav-btn" onclick="showView('vehiculos')">Vehículos</button>
+        <button class="nav-btn" onclick="showView('seguros')">Seguros</button>
         <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
         <button class="nav-btn" onclick="showView('logs')">Logs</button>
       </div>
@@ -359,6 +360,11 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-vehiculos" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Vehículos</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:13px;font-weight:600;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="filtro-flota-propia" onchange="loadVehiculos()" checked style="cursor:pointer"/> Solo flota propia
+          </label>
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-outline" onclick="exportarExcel('vehiculos')">⬇ Excel</button>
           <button class="btn btn-dark" onclick="openModal('modal-nuevo-vehiculo')">+ Nuevo vehículo</button>
@@ -373,6 +379,25 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         </div>
       </div>
     </div>
+
+  <!-- SEGUROS -->
+  <div id="view-seguros" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Seguros</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="exportarExcel('seguros')">⬇ Excel</button>
+        <button class="btn btn-dark" onclick="openModal('modal-nuevo-seguro')">+ Nuevo seguro</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Vehículo</th><th>Aseguradora</th><th>N° Póliza</th><th>Cobertura</th><th>Vigencia hasta</th><th>Prima neta</th><th>Markup</th><th>Prima total</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="tbody-seguros"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <!-- USUARIOS -->
   <div id="view-usuarios" style="display:none">
@@ -974,6 +999,83 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   </div>
 </div>
 
+<!-- ══ MODAL: NUEVO SEGURO ══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-seguro">
+  <div class="modal-card">
+    <div class="modal-title">Nuevo seguro</div>
+    <div class="modal-subtitle">Registrá la póliza y vinculala al vehículo correspondiente.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Vehículo</label>
+        <select class="form-select" id="ns-vehiculo">
+          <option value="">Seleccioná un vehículo...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Aseguradora</label>
+        <input class="form-input" id="ns-aseguradora" placeholder="Ej: Zurich, Sancor, La Caja..."/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">N° de póliza</label>
+        <input class="form-input" id="ns-poliza" placeholder="Ej: POL-2026-001"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cobertura</label>
+        <select class="form-select" id="ns-cobertura">
+          <option value="todo_riesgo">Todo riesgo</option>
+          <option value="terceros_completo">Terceros completo</option>
+          <option value="terceros_basico">Terceros básico</option>
+          <option value="robo_incendio">Robo e incendio</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Vigencia desde</label>
+        <input class="form-input" type="date" id="ns-desde"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vigencia hasta</label>
+        <input class="form-input" type="date" id="ns-hasta"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Prima neta</label>
+        <input class="form-input" type="number" id="ns-prima-neta" placeholder="0.00" oninput="calcularPrimaTotal()"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Markup (%)</label>
+        <input class="form-input" type="number" id="ns-markup" placeholder="0" oninput="calcularPrimaTotal()"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Moneda</label>
+        <select class="form-select" id="ns-moneda">
+          <option value="USD">USD</option>
+          <option value="ARS">ARS</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Prima total (con markup)</label>
+        <input class="form-input" id="ns-prima-total" placeholder="0.00" readonly style="background:var(--gray);font-weight:700"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones</label>
+      <input class="form-input" id="ns-observaciones" placeholder="Notas adicionales..."/>
+    </div>
+    <div id="ns-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-seguro')">Cancelar</button>
+      <button class="btn btn-dark" onclick="crearSeguro()">Guardar póliza</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1140,16 +1242,17 @@ async function loadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','usuarios','logs'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','seguros','usuarios','logs'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','usuarios','logs'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','seguros','usuarios','logs'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
   if (view === 'leads') { loadLeads(); loadLeadsStats(); }
   if (view === 'vehiculos') loadVehiculos();
+  if (view === 'seguros') loadSeguros();
   if (view === 'usuarios') loadUsuarios();
   if (view === 'logs') loadLogs();
 }
@@ -2286,6 +2389,26 @@ async function exportarExcel(vista) {
       }));
       filename = 'leads_' + fecha + '.xlsx';
 
+    } else if (vista === 'seguros') {
+      const { data: rows } = await sbAdmin.from('seguros')
+        .select('*, vehiculos(marca,modelo,anio,patente)')
+        .order('vigencia_hasta', { ascending: true });
+      data = (rows||[]).map(r => ({
+        'Vehículo': r.vehiculos ? r.vehiculos.marca+' '+r.vehiculos.modelo+' '+r.vehiculos.anio : '—',
+        'Patente': r.vehiculos?.patente || '—',
+        'Aseguradora': r.aseguradora,
+        'N° Póliza': r.nro_poliza || '—',
+        'Cobertura': r.cobertura || '—',
+        'Vigencia desde': r.vigencia_desde || '—',
+        'Vigencia hasta': r.vigencia_hasta || '—',
+        'Prima neta': r.prima_neta || '—',
+        'Markup (%)': r.markup || 0,
+        'Prima total': r.prima_total || '—',
+        'Moneda': r.moneda,
+        'Estado': r.estado,
+      }));
+      filename = 'seguros_' + fecha + '.xlsx';
+
     } else if (vista === 'vehiculos') {
       const { data: rows } = await sbAdmin.from('vehiculos')
         .select('*').order('created_at', { ascending: false });
@@ -2450,6 +2573,155 @@ async function loadLeadsStats() {
   if (statsContainer) statsContainer.innerHTML = statsHtml;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// SEGUROS
+// ══════════════════════════════════════════════════════════════════
+async function loadSeguros() {
+  const { data } = await sbAdmin.from('seguros')
+    .select('*, vehiculos(marca, modelo, anio, patente)')
+    .order('vigencia_hasta', { ascending: true });
+
+  const tbody = document.getElementById('tbody-seguros');
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">Sin pólizas registradas.</div></div></td></tr>';
+    return;
+  }
+
+  const hoy = new Date();
+  let html = '';
+  data.forEach(s => {
+    const vehiculo = s.vehiculos ? s.vehiculos.marca + ' ' + s.vehiculos.modelo + ' ' + s.vehiculos.anio : '—';
+    const vencimiento = s.vigencia_hasta ? new Date(s.vigencia_hasta) : null;
+    const diasRestantes = vencimiento ? Math.ceil((vencimiento - hoy) / (1000*60*60*24)) : null;
+    const venceBadge = diasRestantes !== null
+      ? diasRestantes < 0 ? '<div class="badge badge-red">Vencida</div>'
+      : diasRestantes < 30 ? '<div class="badge badge-orange">Vence en ' + diasRestantes + 'd</div>'
+      : '<div class="badge badge-green">Vigente</div>'
+      : '—';
+
+    html += '<tr>';
+    html += '<td class="bold">' + vehiculo + '</td>';
+    html += '<td>' + (s.aseguradora || '—') + '</td>';
+    html += '<td class="mono" style="font-size:12px">' + (s.nro_poliza || '—') + '</td>';
+    html += '<td style="font-size:12px;text-transform:capitalize">' + (s.cobertura?.replace(/_/g,' ') || '—') + '</td>';
+    html += '<td class="mono">' + (s.vigencia_hasta ? formatFecha(s.vigencia_hasta) : '—') + '</td>';
+    html += '<td class="mono">' + (s.prima_neta ? s.moneda + ' ' + Number(s.prima_neta).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td class="mono">' + (s.markup ? s.markup + '%' : '—') + '</td>';
+    html += '<td class="bold">' + (s.prima_total ? s.moneda + ' ' + Number(s.prima_total).toLocaleString('es-AR') : '—') + '</td>';
+    html += '<td>' + venceBadge + '</td>';
+    html += '<td><button class="btn btn-outline btn-sm" onclick="editarSeguro(\'' + s.id + '\')">Editar</button></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+async function crearSeguro() {
+  const vehiculo_id = document.getElementById('ns-vehiculo').value;
+  const aseguradora = document.getElementById('ns-aseguradora').value.trim();
+  const nro_poliza = document.getElementById('ns-poliza').value.trim();
+  const cobertura = document.getElementById('ns-cobertura').value;
+  const vigencia_desde = document.getElementById('ns-desde').value || null;
+  const vigencia_hasta = document.getElementById('ns-hasta').value || null;
+  const prima_neta = parseFloat(document.getElementById('ns-prima-neta').value) || null;
+  const markup = parseFloat(document.getElementById('ns-markup').value) || 0;
+  const prima_total = parseFloat(document.getElementById('ns-prima-total').value) || null;
+  const moneda = document.getElementById('ns-moneda').value;
+  const observaciones = document.getElementById('ns-observaciones').value.trim() || null;
+
+  if (!aseguradora) {
+    document.getElementById('ns-msg').innerHTML = '<div class="alert alert-error">Ingresá la aseguradora.</div>';
+    return;
+  }
+
+  const { error } = await sbAdmin.from('seguros').insert({
+    vehiculo_id: vehiculo_id || null,
+    aseguradora, nro_poliza, cobertura,
+    vigencia_desde, vigencia_hasta,
+    prima_neta, markup, prima_total, moneda, observaciones,
+    estado: 'vigente'
+  });
+
+  if (error) {
+    document.getElementById('ns-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  showToast('✓ Póliza registrada');
+  closeModal('modal-nuevo-seguro');
+  loadSeguros();
+  await registrarLog('crear_seguro', 'Creó póliza de ' + aseguradora + ' para vehículo ' + vehiculo_id);
+}
+
+async function editarSeguro(id) {
+  const { data: s } = await sbAdmin.from('seguros').select('*').eq('id', id).single();
+  if (!s) return;
+
+  document.getElementById('ns-vehiculo').value = s.vehiculo_id || '';
+  document.getElementById('ns-aseguradora').value = s.aseguradora || '';
+  document.getElementById('ns-poliza').value = s.nro_poliza || '';
+  document.getElementById('ns-cobertura').value = s.cobertura || 'todo_riesgo';
+  document.getElementById('ns-desde').value = s.vigencia_desde || '';
+  document.getElementById('ns-hasta').value = s.vigencia_hasta || '';
+  document.getElementById('ns-prima-neta').value = s.prima_neta || '';
+  document.getElementById('ns-markup').value = s.markup || '';
+  document.getElementById('ns-prima-total').value = s.prima_total || '';
+  document.getElementById('ns-moneda').value = s.moneda || 'USD';
+  document.getElementById('ns-observaciones').value = s.observaciones || '';
+
+  document.querySelector('#modal-nuevo-seguro .modal-title').textContent = 'Editar póliza';
+  const btn = document.querySelector('#modal-nuevo-seguro .btn-dark');
+  btn.textContent = 'Guardar cambios';
+  btn.onclick = () => actualizarSeguro(id);
+  document.getElementById('ns-msg').innerHTML = '';
+  openModal('modal-nuevo-seguro');
+}
+
+async function actualizarSeguro(id) {
+  const data = {
+    vehiculo_id: document.getElementById('ns-vehiculo').value || null,
+    aseguradora: document.getElementById('ns-aseguradora').value.trim(),
+    nro_poliza: document.getElementById('ns-poliza').value.trim(),
+    cobertura: document.getElementById('ns-cobertura').value,
+    vigencia_desde: document.getElementById('ns-desde').value || null,
+    vigencia_hasta: document.getElementById('ns-hasta').value || null,
+    prima_neta: parseFloat(document.getElementById('ns-prima-neta').value) || null,
+    markup: parseFloat(document.getElementById('ns-markup').value) || 0,
+    prima_total: parseFloat(document.getElementById('ns-prima-total').value) || null,
+    moneda: document.getElementById('ns-moneda').value,
+    observaciones: document.getElementById('ns-observaciones').value.trim() || null,
+  };
+
+  const { error } = await sbAdmin.from('seguros').update(data).eq('id', id);
+  if (error) {
+    document.getElementById('ns-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
+    return;
+  }
+
+  showToast('✓ Póliza actualizada');
+  closeModal('modal-nuevo-seguro');
+  document.querySelector('#modal-nuevo-seguro .modal-title').textContent = 'Nuevo seguro';
+  const btn = document.querySelector('#modal-nuevo-seguro .btn-dark');
+  btn.textContent = 'Guardar póliza';
+  btn.onclick = crearSeguro;
+  loadSeguros();
+}
+
+function calcularPrimaTotal() {
+  const prima = parseFloat(document.getElementById('ns-prima-neta').value) || 0;
+  const markup = parseFloat(document.getElementById('ns-markup').value) || 0;
+  const total = prima * (1 + markup / 100);
+  document.getElementById('ns-prima-total').value = total.toFixed(2);
+}
+
+async function cargarVehiculosEnSeguroModal() {
+  const { data } = await sbAdmin.from('vehiculos').select('id, marca, modelo, anio, patente').eq('flota_propia', true).order('marca');
+  const sel = document.getElementById('ns-vehiculo');
+  if (!data) return;
+  sel.innerHTML = '<option value="">Seleccioná un vehículo...</option>' +
+    data.map(v => '<option value="' + v.id + '">' + v.marca + ' ' + v.modelo + ' ' + v.anio + (v.patente ? ' · ' + v.patente : '') + '</option>').join('');
+}
+
+// Add to seguros excel export
 // INIT
 checkSession();
 </script>
