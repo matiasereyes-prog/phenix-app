@@ -963,7 +963,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
       <div id="import-excel-msg" style="margin-bottom:8px"></div>
       <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
-        <table class="data-table" id="table-liquidacion">
+        <table class="data-table" id="table-liquidacion" style="border-collapse:collapse;min-width:900px">
           <thead style="position:sticky;top:0">
             <tr>
               <th>#</th>
@@ -3314,15 +3314,22 @@ async function importarCuotasExcel(input) {
 
 function excelDateToString(val) {
   if (!val) return null;
-  if (typeof val === 'string' && val.includes('-')) return val;
+  // Already ISO format
+  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) return val.slice(0,10);
+  // d/mm/aaaa or dd/mm/aaaa or d/m/aaaa
   if (typeof val === 'string' && val.includes('/')) {
     const parts = val.split('/');
-    if (parts.length === 3) return parts[2] + '-' + parts[1].padStart(2,'0') + '-' + parts[0].padStart(2,'0');
+    if (parts.length === 3) {
+      const d = parts[0].padStart(2,'0');
+      const m = parts[1].padStart(2,'0');
+      const y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      return y + '-' + m + '-' + d;
+    }
   }
-  // Excel serial date
-  if (typeof val === 'number') {
-    const date = new Date((val - 25569) * 86400 * 1000);
-    return date.toISOString().split('T')[0];
+  // Excel serial date (number) — use UTC to avoid timezone shifts
+  if (typeof val === 'number' && val > 1000) {
+    const utc = new Date(Date.UTC(1899, 11, 30) + val * 86400000);
+    return utc.toISOString().slice(0,10);
   }
   return null;
 }
