@@ -276,7 +276,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-leasings" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Leasings</div>
-        <button class="btn btn-orange" onclick="openModal('modal-nuevo-lease')">+ Nuevo leasing</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportarExcel('leasings')">⬇ Excel</button>
+          <button class="btn btn-orange" onclick="openModal('modal-nuevo-lease')">+ Nuevo leasing</button>
+        </div>
       </div>
       <div class="search-bar">
         <input class="search-input" type="text" id="search-leasings" placeholder="Buscar por cliente o vehículo..." oninput="filterLeasings()"/>
@@ -308,7 +311,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-clientes" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Clientes</div>
-        <button class="btn btn-dark" onclick="openModal('modal-nuevo-cliente')">+ Nuevo cliente</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportarExcel('clientes')">⬇ Excel</button>
+          <button class="btn btn-dark" onclick="openModal('modal-nuevo-cliente')">+ Nuevo cliente</button>
+        </div>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
@@ -351,7 +357,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div id="view-vehiculos" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Vehículos</div>
-        <button class="btn btn-dark" onclick="openModal('modal-nuevo-vehiculo')">+ Nuevo vehículo</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportarExcel('vehiculos')">⬇ Excel</button>
+          <button class="btn btn-dark" onclick="openModal('modal-nuevo-vehiculo')">+ Nuevo vehículo</button>
+        </div>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
