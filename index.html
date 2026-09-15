@@ -3242,24 +3242,28 @@ async function importarCuotasExcel(input) {
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    // Estructura del Excel de Phenix Leasing:
-    // Col A = Ind (#), Col B = Can#, Col C = Fecha, Col D = Importe (cuota)
-    // Col E = Saldo, Col F = Int período (interés), Col G = Amort (amortización)
-    // Fila 0 es header (OC o fila con texto), filas 1-N son cuotas
+    // Template Phenix Leasing:
+    // Col 0 = N° Cuota, Col 1 = Fecha vencimiento, Col 2 = Cuota (importe)
+    // Col 3 = Amortización, Col 4 = Interés, Col 5 = IVA
+    // Col 6 = Seguro, Col 7 = Adicionales, Col 8 = Saldo restante
+    // Fila 0 = encabezados (se omite)
     const cuotasData = [];
-    for (let i = 0; i < rows.length; i++) {
+    const pn = v => { const n = parseFloat(String(v || '').replace(/[^0-9.-]/g,'')); return isNaN(n) ? null : n; };
+    for (let i = 1; i < rows.length; i++) {  // start at 1 to skip header
       const row = rows[i];
-      // Buscar filas donde col A (índice 0) sea un número de cuota >= 1
       const num = parseInt(row[0]);
       if (!isNaN(num) && num >= 1 && num <= 360) {
-        const fecha = row[2] ? excelDateToString(row[2]) : null;  // Col C
-        const monto = parseFloat(String(row[3]).replace(/[^0-9.-]/g,'')) || null;  // Col D = Importe/Cuota
-        const saldo = parseFloat(String(row[4]).replace(/[^0-9.-]/g,'')) || null;  // Col E = Saldo
-        const interes = parseFloat(String(row[5]).replace(/[^0-9.-]/g,'')) || null; // Col F = Int período
-        const capital = parseFloat(String(row[6]).replace(/[^0-9.-]/g,'')) || null; // Col G = Amort
+        const fecha = row[1] ? excelDateToString(row[1]) : null;
+        const monto   = pn(row[2]);  // Cuota
+        const capital = pn(row[3]);  // Amortización
+        const interes = pn(row[4]);  // Interés
+        const iva     = pn(row[5]);  // IVA
+        const seguro  = pn(row[6]);  // Seguro
+        const adicion = pn(row[7]);  // Adicionales
+        const saldo   = pn(row[8]);  // Saldo restante
 
-        if (monto || capital) {
-          cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, saldo_restante: saldo });
+        if (monto !== null || capital !== null) {
+          cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, iva, seguro, adicionales_monto: adicion, saldo_restante: saldo });
         }
       }
     }
@@ -3296,7 +3300,16 @@ async function importarCuotasExcel(input) {
       };
 
       if (existente) {
-        await sbAdmin.from('cuotas').update({ capital: c.capital, interes: c.interes, saldo_restante: c.saldo_restante, monto: c.monto || undefined, fecha_vencimiento: c.fecha_vencimiento || undefined }).eq('id', existente.id);
+        const upd = {};
+        if (c.monto !== null) upd.monto = c.monto;
+        if (c.capital !== null) upd.capital = c.capital;
+        if (c.interes !== null) upd.interes = c.interes;
+        if (c.iva !== null) upd.iva = c.iva;
+        if (c.seguro !== null) upd.seguro = c.seguro;
+        if (c.adicionales_monto !== null) upd.adicionales_monto = c.adicionales_monto;
+        if (c.saldo_restante !== null) upd.saldo_restante = c.saldo_restante;
+        if (c.fecha_vencimiento) upd.fecha_vencimiento = c.fecha_vencimiento;
+        await sbAdmin.from('cuotas').update(upd).eq('id', existente.id);
         updated++;
       } else {
         await sbAdmin.from('cuotas').insert(payload);
