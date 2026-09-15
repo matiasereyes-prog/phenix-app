@@ -3234,121 +3234,109 @@ async function importarCuotasExcel(input) {
   try {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
-
-    // Buscar hoja de devengamiento primero, si no la primera
-    let sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('deveng') || n.toLowerCase().includes('liquidac') || n.toLowerCase().includes('cuota'));
-    if (!sheetName) sheetName = wb.SheetNames[0];
-    
-    const ws = wb.Sheets[sheetName];
+    const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Template Phenix Leasing — mapeo por nombre de columna del header
-    const pn = v => { if (v === null || v === undefined || v === '' || v === '-') return null; const n = parseFloat(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n) ? null : n; };
-    
-    // Mapeo directo por posición usando el header del template Phenix
-    // Orden fijo: N°Cuota(0), Fecha(1), Cuota(2), Amort(3), Interés(4), IVA(5), Seguro(6), Adicionales(7), Saldo(8)
-    const rawHeader = rows[0].map(h => String(h || '').trim());
-    
-    // Buscar cada columna por palabras clave sin depender de acentos
-    const normalize = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
-    const normHeader = rawHeader.map(normalize);
-    
-    const findCol = (...keys) => {
-      for (const key of keys) {
-        const nk = normalize(key);
-        const idx = normHeader.findIndex(h => h === nk || h.includes(nk));
-        if (idx >= 0) return idx;
+    if (!rows || rows.length < 2) {
+      msgEl.innerHTML = '<div class="alert alert-error">El archivo está vacío o no tiene datos.</div>';
+      return;
+    }
+
+    // Helper para parsear números — null si vacío o guión
+    const pn = v => {
+      if (v === null || v === undefined || v === '' || v === '-' || v === '—') return null;
+      const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+      return isNaN(n) ? null : n;
+    };
+
+    // El template Phenix tiene estas columnas en orden fijo:
+    // 0: N° Cuota, 1: Fecha vencimiento, 2: Cuota (importe), 3: Amortización,
+    // 4: Interés, 5: IVA, 6: Seguro, 7: Adicionales, 8: Saldo restante
+    // Si el header no matchea, usamos posición fija.
+
+    // Detectar índices por nombre de columna
+    const norm = s => String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9 ]/g, '').trim();
+
+    const hdr = rows[0].map(norm);
+
+    const findExact = (...keys) => {
+      for (const k of keys) {
+        const i = hdr.indexOf(norm(k));
+        if (i >= 0) return i;
       }
       return -1;
     };
 
-    const colNum     = findCol('n cuota', 'num', 'numero', 'cuota');
-    const colFecha   = findCol('fecha vencimiento', 'fecha');
-    const colMonto   = findCol('cuota importe', 'importe', 'monto');
-    const colCapital = findCol('amortizacion', 'amort', 'capital');
-    const colInteres = findCol('interes', 'int periodo', 'int');
-    const colIva     = findCol('iva');
-    const colSeguro  = findCol('seguro');
-    const colAdicion = findCol('adicionales', 'adicion');
-    const colSaldo   = findCol('saldo restante', 'saldo');
-
-    // Fallback a posicion fija si no encuentra por nombre
-    const ci = (found, fallback) => found >= 0 ? found : fallback;
-    
-    const col = () => {}; // dummy para compatibilidad
-    const get = () => {}; // dummy
+    // Buscar cada columna — más específico primero para evitar conflictos
+    const iNum     = findExact('n cuota', 'n  cuota', 'numero', 'num') >= 0 ? findExact('n cuota', 'n  cuota', 'numero', 'num') : 0;
+    const iFecha   = findExact('fecha vencimiento', 'fecha') >= 0 ? findExact('fecha vencimiento', 'fecha') : 1;
+    const iMonto   = findExact('cuota  importe', 'cuota importe', 'importe') >= 0 ? findExact('cuota  importe', 'cuota importe', 'importe') : 2;
+    const iCapital = findExact('amortizacion', 'amort', 'capital') >= 0 ? findExact('amortizacion', 'amort', 'capital') : 3;
+    const iInteres = findExact('interes', 'int periodo', 'int period') >= 0 ? findExact('interes', 'int periodo', 'int period') : 4;
+    const iIva     = findExact('iva') >= 0 ? findExact('iva') : 5;
+    const iSeguro  = findExact('seguro') >= 0 ? findExact('seguro') : 6;
+    const iAdicion = findExact('adicionales', 'adicion') >= 0 ? findExact('adicionales', 'adicion') : 7;
+    const iSaldo   = findExact('saldo restante', 'saldo') >= 0 ? findExact('saldo restante', 'saldo') : 8;
 
     const cuotasData = [];
     for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      // Always pad to at least header length so empty cells don't shift columns
-      // padding handled below
-      
-      // Pad row to max column index needed
-      while (row.length <= Math.max(colNum, colFecha, colMonto, colCapital, colInteres, colIva, colSeguro, colAdicion, colSaldo, 8)) row.push(null);
-      
-      const num = parseInt(row[ci(colNum, 0)]);
-      if (!isNaN(num) && num >= 1 && num <= 360) {
-        const fecha   = excelDateToString(row[ci(colFecha,   1)]);
-        const monto   = pn(row[ci(colMonto,   2)]);
-        const capital = pn(row[ci(colCapital, 3)]);
-        const interes = pn(row[ci(colInteres, 4)]);
-        const iva     = pn(row[ci(colIva,     5)]);
-        const seguro  = pn(row[ci(colSeguro,  6)]);
-        const adicion = pn(row[ci(colAdicion, 7)]);
-        const saldo   = pn(row[ci(colSaldo,   8)]);
+      const row = [...rows[i]]; // copy
+      // Asegurar que la fila tiene suficientes elementos
+      while (row.length <= Math.max(iNum, iFecha, iMonto, iCapital, iInteres, iIva, iSeguro, iAdicion, iSaldo)) {
+        row.push(null);
+      }
 
-        if (monto !== null || capital !== null) {
-          cuotasData.push({ numero: num, fecha_vencimiento: fecha, monto, capital, interes, iva, seguro, adicionales_monto: adicion, saldo_restante: saldo });
+      const num = parseInt(row[iNum]);
+      if (!isNaN(num) && num >= 1 && num <= 360) {
+        const cuota = {
+          numero: num,
+          fecha_vencimiento: excelDateToString(row[iFecha]),
+          monto:             pn(row[iMonto]),
+          capital:           pn(row[iCapital]),
+          interes:           pn(row[iInteres]),
+          iva:               pn(row[iIva]),
+          seguro:            pn(row[iSeguro]),
+          adicionales_monto: pn(row[iAdicion]),
+          saldo_restante:    pn(row[iSaldo]),
+        };
+        if (cuota.monto !== null || cuota.capital !== null) {
+          cuotasData.push(cuota);
         }
       }
     }
 
     if (!cuotasData.length) {
-      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron datos de cuotas en el archivo. Verificá que el Excel tenga columnas: N°, Fecha, Cuota, Capital, Interés, Saldo.</div>';
+      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron cuotas. Verificá que el archivo use el template Phenix.</div>';
       return;
     }
 
-    // Confirmar con el usuario
     if (!confirm('Se encontraron ' + cuotasData.length + ' cuotas. ¿Actualizar el cuadro de amortización?')) {
       input.value = '';
       msgEl.innerHTML = '';
       return;
     }
 
-    // Obtener cuotas existentes del contrato
-    const { data: cuotasExistentes } = await sbAdmin.from('cuotas').select('id, numero').eq('contrato_id', currentLeaseId).order('numero');
-    
-    let updated = 0;
-    let inserted = 0;
+    const { data: existentes } = await sbAdmin.from('cuotas').select('id, numero').eq('contrato_id', currentLeaseId).order('numero');
+    let updated = 0, inserted = 0;
 
     for (const c of cuotasData) {
-      const existente = cuotasExistentes?.find(q => q.numero === c.numero);
-      const payload = {
-        contrato_id: currentLeaseId,
-        numero: c.numero,
-        fecha_vencimiento: c.fecha_vencimiento,
-        monto: c.monto,
-        capital: c.capital,
-        interes: c.interes,
-        saldo_restante: c.saldo_restante,
-        estado: 'pendiente'
-      };
-
+      const existente = existentes?.find(q => q.numero === c.numero);
       if (existente) {
         const upd = {};
-        if (c.monto !== null) upd.monto = c.monto;
-        if (c.capital !== null) upd.capital = c.capital;
-        if (c.interes !== null) upd.interes = c.interes;
-        if (c.iva !== null) upd.iva = c.iva;
-        if (c.seguro !== null) upd.seguro = c.seguro;
-        if (c.adicionales_monto !== null) upd.adicionales_monto = c.adicionales_monto;
-        if (c.saldo_restante !== null) upd.saldo_restante = c.saldo_restante;
         if (c.fecha_vencimiento) upd.fecha_vencimiento = c.fecha_vencimiento;
+        if (c.monto !== null)             upd.monto = c.monto;
+        if (c.capital !== null)           upd.capital = c.capital;
+        if (c.interes !== null)           upd.interes = c.interes;
+        if (c.iva !== null)               upd.iva = c.iva;
+        if (c.seguro !== null)            upd.seguro = c.seguro;
+        if (c.adicionales_monto !== null) upd.adicionales_monto = c.adicionales_monto;
+        if (c.saldo_restante !== null)    upd.saldo_restante = c.saldo_restante;
         await sbAdmin.from('cuotas').update(upd).eq('id', existente.id);
         updated++;
       } else {
-        await sbAdmin.from('cuotas').insert(payload);
+        await sbAdmin.from('cuotas').insert({ contrato_id: currentLeaseId, estado: 'pendiente', ...c });
         inserted++;
       }
     }
@@ -3356,12 +3344,13 @@ async function importarCuotasExcel(input) {
     msgEl.innerHTML = '<div class="alert alert-success">✓ ' + updated + ' cuotas actualizadas, ' + inserted + ' creadas.</div>';
     input.value = '';
     loadLiquidacion();
-    await registrarLog('importar_cuotas', 'Importó cuadro de amortización desde Excel (' + cuotasData.length + ' cuotas) para lease ' + currentLeaseId);
+    await registrarLog('importar_cuotas', 'Importo ' + cuotasData.length + ' cuotas para lease ' + currentLeaseId);
 
   } catch(e) {
     msgEl.innerHTML = '<div class="alert alert-error">Error al procesar: ' + e.message + '</div>';
   }
 }
+
 
 function excelDateToString(val) {
   if (!val) return null;
