@@ -642,6 +642,17 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
     </div>
 
+    <!-- Import opcional de cuotas -->
+    <div style="border-top:1.5px solid var(--border);margin-top:16px;padding-top:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">📊 Importar cuadro de amortización (opcional)</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Si tenés el Excel del cuadro listo podés importarlo ahora. También podés hacerlo después.</div>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        ⬆ Seleccionar Excel
+        <input type="file" id="nl-import-excel" accept=".xlsx,.xls" style="display:none" onchange="previewExcelImport(this)"/>
+      </label>
+      <div id="nl-excel-preview" style="margin-top:6px;font-size:12px;color:var(--green);font-weight:600"></div>
+    </div>
+
     <div id="nl-msg"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-nuevo-lease')">Cancelar</button>
@@ -1531,6 +1542,7 @@ const sbAdmin = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
 // ── Edge Function helper — reemplazará a sbAdmin progresivamente ──
 const EDGE_URL = 'https://xxscdrwkoutlualpveif.supabase.co/functions/v1/admin-query';
 const EDGE_USERS_URL = 'https://xxscdrwkoutlualpveif.supabase.co/functions/v1/swift-service';
+const SUPABASE_URL_CONST = 'https://xxscdrwkoutlualpveif.supabase.co';
 
 async function edgeUsers(action, payload = {}) {
   const { data: { session } } = await sb.auth.getSession();
@@ -2283,9 +2295,20 @@ async function crearLease() {
       }
     }
 
-    showToast('✓ Leasing creado correctamente');
-    closeModal('modal-nuevo-lease');
-    document.getElementById('nl-msg').innerHTML = '';
+    // Import Excel if one was selected
+    if (_pendingExcelFile) {
+      await importarExcelAlContrato(contrato.id);
+      setTimeout(() => {
+        closeModal('modal-nuevo-lease');
+        document.getElementById('nl-msg').innerHTML = '';
+        _pendingExcelFile = null;
+        document.getElementById('nl-excel-preview').textContent = '';
+      }, 2000);
+    } else {
+      showToast('✓ Leasing creado correctamente');
+      closeModal('modal-nuevo-lease');
+      document.getElementById('nl-msg').innerHTML = '';
+    }
     loadDashboard();
   } catch(e) {
     document.getElementById('nl-msg').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -4043,6 +4066,423 @@ async function toggleModelo(id, activo) {
   await sbAdmin.from('modelos_disponibles').update({ activo: !activo }).eq('id', id);
   showToast(activo ? 'Modelo desactivado' : '✓ Modelo activado');
   loadModelos();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GENERAR CONTRATO PDF
+// ══════════════════════════════════════════════════════════════════
+async function generarContratoPDF() {
+  showToast('Generando contrato PDF...');
+
+  try {
+    const { data: contrato } = await sbAdmin.from('contratos')
+      .select('*, usuarios(nombre, email, cuit, telefono, tipo), vehiculos(marca, modelo, anio, vin, patente)')
+      .eq('id', currentLeaseId).single();
+    if (!contrato) { showToast('Error: contrato no encontrado'); return; }
+
+    const { data: cuotas } = await sbAdmin.from('cuotas')
+      .select('numero, fecha_vencimiento, monto, iva, interes, capital, saldo_restante')
+      .eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
+
+    const u = contrato.usuarios || {};
+    const v = contrato.vehiculos || {};
+    const mon = contrato.canon_moneda || 'USD';
+    const fmt = n => n ? mon + ' ' + Number(n).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    const fmtFecha = s => s ? new Date(s).toLocaleDateString('es-AR') : '—';
+
+    // Load jsPDF dynamically
+    if (!window.jspdf) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const W = 210, H = 297;
+    const ML = 20, MR = 20, MT = 35;
+    const nroContrato = contrato.id.slice(0,8).toUpperCase();
+    const fechaFirma = new Date().toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+    const drawHeader = () => {
+      doc.setFillColor(10,10,10);
+      doc.rect(0, 0, W, 22, 'F');
+      doc.setFontSize(14); doc.setFont('helvetica','bold');
+      doc.setTextColor(240,90,40);
+      doc.text('PHENIX', ML, 14);
+      doc.setTextColor(255,255,255);
+      doc.text('LEASING', ML + 22, 14);
+      doc.setFontSize(7); doc.setFont('helvetica','normal');
+      doc.setTextColor(170,170,170);
+      doc.text('CONTRATO DE LEASING', W - MR, 11, { align:'right' });
+      doc.setTextColor(255,255,255);
+      doc.text('N° ' + nroContrato, W - MR, 16, { align:'right' });
+    };
+
+    const drawFooter = (pageNum) => {
+      doc.setFillColor(235,235,232);
+      doc.rect(0, H - 12, W, 12, 'F');
+      doc.setFontSize(7); doc.setFont('helvetica','normal');
+      doc.setTextColor(150,150,150);
+      doc.text('Carlos Pellegrini 1163 piso 10°, CABA — noreply@phenixleasing.com — phenixleasing.com', ML, H - 5);
+      doc.text('Página ' + pageNum, W - MR, H - 5, { align:'right' });
+    };
+
+    const addPage = (pageNum) => {
+      if (pageNum > 1) doc.addPage();
+      drawHeader();
+      drawFooter(pageNum);
+    };
+
+    const label = (x, y, text) => {
+      doc.setFontSize(7); doc.setFont('helvetica','bold');
+      doc.setTextColor(150,150,150);
+      doc.text(text.toUpperCase(), x, y);
+    };
+    const value = (x, y, text, maxW) => {
+      doc.setFontSize(9.5); doc.setFont('helvetica','normal');
+      doc.setTextColor(10,10,10);
+      if (maxW) {
+        const lines = doc.splitTextToSize(String(text), maxW);
+        doc.text(lines, x, y);
+        return lines.length * 4.5;
+      }
+      doc.text(String(text), x, y);
+      return 5;
+    };
+    const sectionTitle = (x, y, text) => {
+      doc.setDrawColor(240,90,40); doc.setLineWidth(0.8);
+      doc.line(ML, y - 2, W - MR, y - 2);
+      doc.setFontSize(9); doc.setFont('helvetica','bold');
+      doc.setTextColor(240,90,40);
+      doc.text(text, x, y + 4);
+      return y + 8;
+    };
+
+    // ── PAGE 1: PORTADA ──────────────────────────────────────────────
+    let pageNum = 1; addPage(pageNum); let y = MT + 6;
+
+    doc.setFontSize(22); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
+    doc.text('CONTRATO DE LEASING', ML, y); y += 8;
+    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(150,150,150);
+    doc.text('N° ' + nroContrato + '  ·  ' + fechaFirma, ML, y); y += 6;
+    doc.setDrawColor(220,220,215); doc.setLineWidth(0.3);
+    doc.line(ML, y, W - MR, y); y += 8;
+
+    // Summary box
+    doc.setFillColor(245,245,243);
+    doc.rect(ML, y, W - ML - MR, 16, 'F');
+    doc.setDrawColor(224,224,220); doc.setLineWidth(0.3);
+    doc.rect(ML, y, W - ML - MR, 16, 'S');
+    const cols = [ML+2, ML+44, ML+101, ML+136, ML+161];
+    const labels2 = ['TOMADOR','BIEN','VALOR CONTRATO','PLAZO','CANON MENSUAL'];
+    const vals2 = [u.nombre||u.email||'—', v.marca?v.marca+' '+v.modelo+(v.anio?' '+v.anio:''):(contrato.auto_descripcion||'—'), fmt(contrato.valor_contrato||contrato.canon_mensual*contrato.plazo_meses), (contrato.plazo_meses||'—')+' meses', fmt(contrato.canon_mensual)+' + IVA'];
+    cols.forEach((cx, i) => {
+      doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(150,150,150);
+      doc.text(labels2[i], cx, y + 5);
+      doc.setFontSize(8.5); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
+      const maxW2 = i < 4 ? (cols[i+1]||W-MR) - cx - 4 : W - MR - cx;
+      const lines2 = doc.splitTextToSize(vals2[i], maxW2);
+      doc.text(lines2[0]||'', cx, y + 12);
+    }); y += 22;
+
+    // Partes
+    y = sectionTitle(ML, y, 'LAS PARTES') + 2;
+    const partes = [
+      ['DADOR', 'Phenix Leasing S.A.', 'TOMADOR', u.nombre||u.email||'—'],
+      ['CUIT', '30-70883564-8', 'CUIT', u.cuit||'—'],
+      ['REPRESENTANTE', 'Daniel Mario Cardoni', 'REPRESENTANTE', u.nombre||'—'],
+      ['DOMICILIO', 'Carlos Pellegrini 1163 piso 10°, CABA', 'DOMICILIO', '—'],
+    ];
+    partes.forEach(([l1,v1,l2,v2]) => {
+      label(ML, y, l1); value(ML, y+4, v1, 75);
+      label(ML+90, y, l2); value(ML+90, y+4, v2, 75);
+      y += 12;
+    }); y += 4;
+
+    // El Bien
+    y = sectionTitle(ML, y, 'EL BIEN') + 2;
+    const bien_desc = v.marca ? v.marca + ' ' + v.modelo + (v.anio ? ' ' + v.anio : '') : (contrato.auto_descripcion || '—');
+    label(ML, y, 'DESCRIPCIÓN'); value(ML, y+4, bien_desc, 75);
+    label(ML+90, y, 'PRECIO DEL BIEN (con IVA)'); value(ML+90, y+4, fmt(contrato.precio_bien), 75);
+    y += 12;
+    label(ML, y, 'DESTINO DE USO'); value(ML, y+4, 'Particular', 75);
+    label(ML+90, y, 'ASEGURADORA'); value(ML+90, y+4, 'A confirmar — Todo riesgo con franquicia', 75);
+    y += 14;
+
+    // Condiciones financieras
+    y = sectionTitle(ML, y, 'CONDICIONES FINANCIERAS') + 2;
+    const finRows = [
+      ['MONEDA', mon === 'ARS' ? 'Pesos Argentinos' : 'Dólares Estadounidenses', 'PLAZO', (contrato.plazo_meses||'—') + ' meses'],
+      ['TASA NOMINAL ANUAL', contrato.tasa_anual ? (contrato.tasa_anual*100).toFixed(2) + '%' : '—', 'FECHA DE INICIO', fmtFecha(contrato.fecha_inicio)],
+      ['CANON MENSUAL (sin IVA)', fmt(contrato.canon_mensual), 'OPCIÓN DE COMPRA', fmt(contrato.opcion_compra)],
+      ['GARANTÍA / DEPÓSITO', fmt(contrato.garantia), 'IVA APLICABLE', '21% sobre el canon total'],
+    ];
+    finRows.forEach(([l1,v1,l2,v2]) => {
+      label(ML, y, l1); value(ML, y+4, v1, 75);
+      label(ML+90, y, l2); value(ML+90, y+4, v2, 75);
+      y += 12;
+    });
+
+    // ── PAGE 2: CONDICIONES GENERALES ────────────────────────────────
+    pageNum++; addPage(pageNum); y = MT + 4;
+    y = sectionTitle(ML, y, 'CONDICIONES GENERALES') + 4;
+
+    const clausulas = [
+      ['1. Objeto', 'El Dador cede en Leasing el o los Bienes detallados en las Condiciones Particulares. El uso al que se destinarán los Bienes será el allí mencionado y serán adquiridos por el Dador al Proveedor indicado y elegido por el Tomador.'],
+      ['2. Plazo', 'La Fecha de Inicio del Leasing será la fecha de entrega de los Bienes al Tomador. El plazo del Leasing será la cantidad de meses enteros establecida en el Anexo II. En caso que la Fecha de Inicio no sea el primero de un mes, se adicionarán los días que medien hasta el primer día del mes siguiente.'],
+      ['3. Valor del Contrato y Cánones', 'La moneda de pago es la indicada en las Condiciones Particulares. El Tomador abonará los cánones indicados en el Anexo II. A dichos importes se les deberá agregar el IVA vigente al momento de su vencimiento.'],
+      ['4. Opción de Compra', 'El Tomador tendrá derecho en la fecha indicada en el Anexo II a ejercer una Opción de Compra por los Bienes al precio establecido más el IVA vigente. En caso de no ejercer la Opción de Compra, el Tomador deberá devolver los Bienes o renovar el Leasing.'],
+      ['5. Depósito en Garantía e Intereses Punitorios', 'El Tomador entrega a la firma del Contrato el importe indicado como garantía del fiel cumplimiento. El Tomador acepta pagar intereses punitorios al triple de la tasa BADLAR vigente por cualquier monto no pagado a su vencimiento.'],
+      ['6. Obligaciones del Tomador', 'El Tomador deberá: (a) mantener los Bienes en perfecto estado; (b) no realizar modificaciones sin autorización; (c) no ceder el Contrato sin autorización del Dador; (d) contratar y mantener vigentes los seguros; (e) informar todo cambio en su situación patrimonial.'],
+      ['7. Seguros', 'Durante todo el plazo del Contrato los Bienes serán asegurados conforme lo indicado. Los costos de primas y gastos serán a cargo del Tomador. El Beneficiario de las pólizas de seguros será el Dador.'],
+      ['8. Inscripción', 'El Contrato será inscripto por el Dador en el Registro que corresponda. Los gastos de inscripción, certificaciones y gestoría serán a cargo del Tomador.'],
+      ['9. Rescisión por Incumplimiento', 'El incumplimiento de cualquiera de las obligaciones del Tomador, incluyendo la falta de pago del canon o del seguro, será considerado material y dará derecho al Dador a rescindir el Contrato exigiendo la entrega inmediata de los Bienes, más una multa del 30% del Valor del Contrato.'],
+      ['10. Opción de Compra Anticipada', 'El Tomador podrá comprar los Bienes en cualquier momento antes del vencimiento. El precio será la suma de los cánones vencidos e impagos más el valor presente (descontado al 12% TEA) de todos los cánones a vencer, más el IVA vigente.'],
+      ['11. Jurisdicción y Derecho Aplicable', 'Las diferencias que pudieren surgir se someterán a la jurisdicción de los tribunales ordinarios de la Capital Federal, República Argentina. El contrato se rige por las leyes de la República Argentina.'],
+      ['12. Impuesto a los Sellos', 'Las partes establecen que por la presente operación corresponde el pago del Impuesto de Sellos, el cual será abonado en tiempo y forma por las partes según la legislación vigente.'],
+    ];
+
+    clausulas.forEach(([title, text]) => {
+      if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 8; }
+      doc.setFontSize(9.5); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
+      doc.text(title, ML, y); y += 5;
+      doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+      const lines = doc.splitTextToSize(text, W - ML - MR);
+      doc.text(lines, ML, y); y += lines.length * 4.2 + 6;
+    });
+
+    // ── ANEXO I ───────────────────────────────────────────────────────
+    pageNum++; addPage(pageNum); y = MT + 4;
+    y = sectionTitle(ML, y, 'ANEXO I — CONDICIONES PARTICULARES') + 4;
+
+    const a1rows = [
+      ['Dador', 'Phenix Leasing S.A. — CUIT 30-70883564-8'],
+      ['Domicilio del Dador', 'Carlos Pellegrini 1163 piso 10°, CABA, CP 1009'],
+      ['Representante del Dador', 'Daniel Mario Cardoni — DNI 7.672.689'],
+      ['Tomador', (u.nombre||u.email||'—') + (u.cuit ? ' — CUIT ' + u.cuit : '')],
+      ['Domicilio del Tomador', '—'],
+      ['Representante del Tomador', u.nombre||'—'],
+      ['Bienes', bien_desc + (v.vin ? ' — VIN: ' + v.vin : '') + (v.patente ? ' — Patente: ' + v.patente : '')],
+      ['Precio del Bien (con IVA)', fmt(contrato.precio_bien)],
+      ['Moneda de pago', mon === 'ARS' ? 'Pesos Argentinos' : 'Dólares Estadounidenses'],
+      ['Tasa Nominal Anual', contrato.tasa_anual ? (contrato.tasa_anual*100).toFixed(2) + '%' : '—'],
+      ['Tipo de canon', 'Fijo'],
+      ['Valor del Contrato', fmt(contrato.valor_contrato || contrato.canon_mensual * contrato.plazo_meses)],
+      ['Garantía', fmt(contrato.garantia)],
+      ['Domicilio de Radicación de los Bienes', 'Capital Federal'],
+      ['Contratante del Seguro', 'El Dador'],
+      ['Compañía de Seguros', 'A confirmar'],
+      ['Riesgos cubiertos', 'Todo riesgo con franquicia'],
+      ['Destino del bien', 'Particular'],
+      ['Lugar y fecha del contrato', 'CABA, ' + fechaFirma],
+    ];
+
+    a1rows.forEach(([l, v2]) => {
+      doc.setDrawColor(235,235,232); doc.setLineWidth(0.2);
+      doc.line(ML, y + 5, W - MR, y + 5);
+      doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(150,150,150);
+      doc.text(l.toUpperCase(), ML, y);
+      doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(10,10,10);
+      const vlines = doc.splitTextToSize(String(v2), W - ML - MR - 2);
+      doc.text(vlines, ML, y + 4);
+      y += vlines.length * 4 + 5;
+      if (y > H - 25) { pageNum++; addPage(pageNum); y = MT + 8; }
+    });
+
+    // ── ANEXO II ──────────────────────────────────────────────────────
+    pageNum++; addPage(pageNum); y = MT + 4;
+    y = sectionTitle(ML, y, 'ANEXO II — CUADRO DE CÁNONES') + 4;
+
+    // Table header
+    const cW = [10, 27, 55, 27, 24, 27];
+    const cX = [ML];
+    cW.forEach((w, i) => { if (i > 0) cX.push(cX[i-1] + cW[i-1]); });
+    const headers3 = ['N°', 'Vencimiento', 'Concepto', mon + ' (sin IVA)', 'IVA (21%)', 'Total'];
+
+    const drawTableHeader = () => {
+      doc.setFillColor(10,10,10);
+      doc.rect(ML, y, W - ML - MR, 8, 'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+      headers3.forEach((h, i) => {
+        doc.text(h, cX[i] + cW[i]/2, y + 5.5, { align:'center', maxWidth: cW[i]-2 });
+      });
+      return y + 8;
+    };
+
+    y = drawTableHeader();
+    let totalCanon = 0, totalIva = 0, totalTotal = 0;
+
+    (cuotas || []).forEach((c, idx) => {
+      if (y > H - 25) { pageNum++; addPage(pageNum); y = MT + 4; y = drawTableHeader(); }
+      const canon = parseFloat(c.monto || 0);
+      const iva2 = parseFloat(c.iva || canon * 0.21);
+      const total2 = canon + iva2;
+      totalCanon += canon; totalIva += iva2; totalTotal += total2;
+      const rowBg = idx % 2 === 0 ? [245,245,243] : [255,255,255];
+      doc.setFillColor(...rowBg);
+      doc.rect(ML, y, W - ML - MR, 7, 'F');
+      doc.setDrawColor(224,224,220); doc.setLineWidth(0.2);
+      doc.line(ML, y + 7, W - ML - MR + ML, y + 7);
+      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+      const rowVals = [String(c.numero).padStart(2,'0'), c.fecha_vencimiento ? new Date(c.fecha_vencimiento).toLocaleDateString('es-AR') : '—', 'Canon N° ' + c.numero + ' fijo', canon.toLocaleString('es-AR',{minimumFractionDigits:2}), iva2.toLocaleString('es-AR',{minimumFractionDigits:2}), total2.toLocaleString('es-AR',{minimumFractionDigits:2})];
+      rowVals.forEach((val, i) => {
+        const align2 = i === 2 ? 'left' : 'center';
+        const xPos = i === 2 ? cX[i] + 1 : cX[i] + cW[i]/2;
+        doc.text(String(val), xPos, y + 4.8, { align: align2, maxWidth: cW[i]-2 });
+      });
+      y += 7;
+    });
+
+    // Opcion de compra
+    if (contrato.opcion_compra) {
+      if (y > H - 25) { pageNum++; addPage(pageNum); y = MT + 4; y = drawTableHeader(); }
+      const oc = parseFloat(contrato.opcion_compra); const ocIva = oc * 0.21;
+      doc.setFillColor(250,250,248);
+      doc.rect(ML, y, W - ML - MR, 7, 'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+      const lastFecha = cuotas && cuotas.length ? new Date(cuotas[cuotas.length-1].fecha_vencimiento).toLocaleDateString('es-AR') : '—';
+      [['—', lastFecha, 'Opción de compra', oc.toLocaleString('es-AR',{minimumFractionDigits:2}), ocIva.toLocaleString('es-AR',{minimumFractionDigits:2}), (oc+ocIva).toLocaleString('es-AR',{minimumFractionDigits:2})]].forEach(rowVals => {
+        rowVals.forEach((val, i) => {
+          const align2 = i === 2 ? 'left' : 'center';
+          const xPos = i === 2 ? cX[i] + 1 : cX[i] + cW[i]/2;
+          doc.text(String(val), xPos, y + 4.8, { align: align2, maxWidth: cW[i]-2 });
+        });
+      });
+      y += 7;
+    }
+
+    // Total row
+    if (y > H - 20) { pageNum++; addPage(pageNum); y = MT + 4; }
+    doc.setFillColor(240,90,40);
+    doc.rect(ML, y, W - ML - MR, 8, 'F');
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+    doc.text('TOTAL', cX[2] + cW[2]/2, y + 5.5, { align:'center' });
+    doc.text(totalCanon.toLocaleString('es-AR',{minimumFractionDigits:2}), cX[3] + cW[3]/2, y + 5.5, { align:'center' });
+    doc.text(totalIva.toLocaleString('es-AR',{minimumFractionDigits:2}), cX[4] + cW[4]/2, y + 5.5, { align:'center' });
+    doc.text(totalTotal.toLocaleString('es-AR',{minimumFractionDigits:2}), cX[5] + cW[5]/2, y + 5.5, { align:'center' });
+    y += 14;
+
+    // ── FIRMAS ─────────────────────────────────────────────────────────
+    if (y > H - 60) { pageNum++; addPage(pageNum); y = MT + 4; }
+    y = sectionTitle(ML, y, 'FIRMAS') + 20;
+    doc.setDrawColor(51,51,51); doc.setLineWidth(0.5);
+    doc.line(ML, y, ML + 70, y);
+    doc.line(ML + 95, y, ML + 165, y);
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(150,150,150);
+    doc.text('Apoderado del Dador', ML + 35, y + 5, { align:'center' });
+    doc.text('Representante del Tomador', ML + 130, y + 5, { align:'center' });
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
+    doc.text('Daniel Mario Cardoni', ML + 35, y + 10, { align:'center' });
+    doc.text(u.nombre || '—', ML + 130, y + 10, { align:'center' });
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(150,150,150);
+    doc.text('PHENIX LEASING S.A.', ML + 35, y + 15, { align:'center' });
+    doc.text(u.nombre || '—', ML + 130, y + 15, { align:'center' });
+
+    // Save
+    doc.save('Contrato_Phenix_' + nroContrato + '.pdf');
+    showToast('✓ Contrato generado y descargado');
+    await registrarLog('generar_contrato', 'Generó contrato PDF para lease ' + currentLeaseId);
+
+  } catch(e) {
+    showToast('Error: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// IMPORT EXCEL EN MODAL DE CREACION
+// ══════════════════════════════════════════════════════════════════
+let _pendingExcelFile = null;
+
+function previewExcelImport(input) {
+  const file = input.files[0];
+  if (!file) { _pendingExcelFile = null; return; }
+  _pendingExcelFile = file;
+  document.getElementById('nl-excel-preview').textContent = '📎 ' + file.name + ' — se importará al crear el leasing';
+}
+
+async function importarExcelAlContrato(contratoId) {
+  if (!_pendingExcelFile) return;
+  const msgEl = document.getElementById('nl-msg');
+  msgEl.innerHTML = '<div class="alert alert-warning">Importando cuadro de amortización...</div>';
+
+  try {
+    const data = await _pendingExcelFile.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+    if (!jsonRows || !jsonRows.length) return;
+
+    const pn = v => { if (v === null || v === undefined || v === '' || v === '-') return null; const n = parseFloat(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n) ? null : n; };
+    const keys = Object.keys(jsonRows[0]);
+    const findKey = (...words) => keys.find(k => words.some(w => k.toLowerCase().includes(w.toLowerCase()))) || null;
+
+    const kNum     = findKey('cuota', 'num', '#', 'n°') || keys[0];
+    const kFecha   = findKey('fecha') || keys[1];
+    const kMonto   = findKey('importe', 'monto') || keys[2];
+    const kCapital = findKey('amort', 'capital') || keys[3];
+    const kInteres = findKey('inter') || keys[4];
+    const kIva     = findKey('iva') || keys[5];
+    const kSeguro  = findKey('seguro') || keys[6];
+    const kAdicion = findKey('adicional') || keys[7];
+    const kSaldo   = findKey('saldo') || keys[8];
+
+    const cuotasData = [];
+    for (const row of jsonRows) {
+      const num = parseInt(row[kNum]);
+      if (!isNaN(num) && num >= 1 && num <= 360) {
+        const cuota = {
+          numero: num,
+          fecha_vencimiento: excelDateToString(row[kFecha]),
+          monto: pn(row[kMonto]),
+          capital: pn(row[kCapital]),
+          interes: pn(row[kInteres]),
+          iva: pn(row[kIva]),
+          seguro: pn(row[kSeguro]),
+          adicionales_monto: pn(row[kAdicion]),
+          saldo_restante: pn(row[kSaldo]),
+        };
+        if (cuota.monto !== null || cuota.capital !== null) cuotasData.push(cuota);
+      }
+    }
+
+    if (!cuotasData.length) return;
+
+    // Get existing cuotas and update them
+    const { data: existentes } = await sbAdmin.from('cuotas').select('id, numero').eq('contrato_id', contratoId).order('numero');
+    let updated = 0, inserted = 0;
+
+    for (const c of cuotasData) {
+      const existente = existentes?.find(q => q.numero === c.numero);
+      if (existente) {
+        const upd = {};
+        if (c.fecha_vencimiento) upd.fecha_vencimiento = c.fecha_vencimiento;
+        if (c.monto !== null) upd.monto = c.monto;
+        if (c.capital !== null) upd.capital = c.capital;
+        if (c.interes !== null) upd.interes = c.interes;
+        if (c.iva !== null) upd.iva = c.iva;
+        if (c.seguro !== null) upd.seguro = c.seguro;
+        if (c.adicionales_monto !== null) upd.adicionales_monto = c.adicionales_monto;
+        if (c.saldo_restante !== null) upd.saldo_restante = c.saldo_restante;
+        await sbAdmin.from('cuotas').update(upd).eq('id', existente.id);
+        updated++;
+      } else {
+        await sbAdmin.from('cuotas').insert({ contrato_id: contratoId, estado: 'pendiente', ...c });
+        inserted++;
+      }
+    }
+
+    msgEl.innerHTML = '<div class="alert alert-success">✓ Leasing creado y cuadro de amortización importado (' + updated + ' cuotas actualizadas, ' + inserted + ' creadas).</div>';
+    _pendingExcelFile = null;
+
+  } catch(e) {
+    console.error('Error importando Excel:', e);
+  }
 }
 
 // INIT
