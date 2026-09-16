@@ -925,7 +925,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <!-- Tabs cuadro liquidacion -->
     <div style="display:flex;gap:0;border-bottom:1.5px solid var(--border);margin-bottom:16px">
       <button onclick="switchLDTab('resumen')" id="ld-tab-resumen" style="background:transparent;border:none;border-bottom:2px solid var(--black);padding:10px 16px;font-size:13px;font-weight:600;color:var(--black);cursor:pointer">Resumen</button>
-      <button onclick="switchLDTab('liquidacion')" id="ld-tab-liquidacion" style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer">Cuadro de liquidación</button>
+      <button onclick="abrirLiquidacionFullscreen()" id="ld-tab-liquidacion" style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer">Cuadro de liquidación ↗</button>
       <button onclick="switchLDTab('estado')" id="ld-tab-estado" style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer">Estado</button>
     </div>
 
@@ -1291,6 +1291,79 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-nuevo-lead')">Cancelar</button>
       <button class="btn btn-dark" onclick="crearLead()">Crear lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: LIQUIDACION FULLSCREEN ══════════════════════════════ -->
+<div class="modal-overlay" id="modal-liquidacion-fs" style="align-items:flex-start;padding:20px">
+  <div class="modal-card" style="max-width:100%;width:100%;max-height:90vh;overflow-y:auto;margin-top:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:var(--display);font-size:18px;font-weight:700" id="lfs-titulo">Cuadro de amortización</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label class="btn btn-outline btn-sm" style="cursor:pointer">
+          ⬆ Importar Excel
+          <input type="file" id="import-excel-cuotas-fs" accept=".xlsx,.xls" style="display:none" onchange="importarCuotasExcelFS(this)"/>
+        </label>
+        <button class="btn btn-outline btn-sm" onclick="abrirAgregarAdicional()">+ Adicional</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="openModal('modal-subir-doc')">📎 Doc</button>
+        <button onclick="closeModal('modal-liquidacion-fs')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 12px;font-size:16px;cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div id="import-excel-msg-fs" style="margin-bottom:8px"></div>
+    <div style="overflow-x:auto">
+      <table class="data-table" id="table-liquidacion-fs" style="min-width:1000px;width:100%">
+        <thead>
+          <tr>
+            <th style="min-width:40px">#</th>
+            <th style="min-width:110px">Vencimiento</th>
+            <th style="min-width:100px">Cuota</th>
+            <th style="min-width:110px">Amortización</th>
+            <th style="min-width:90px">Interés</th>
+            <th style="min-width:70px">IVA</th>
+            <th style="min-width:90px">Seguro</th>
+            <th style="min-width:90px">Adicionales</th>
+            <th style="min-width:110px">Total</th>
+            <th style="min-width:110px">Saldo restante</th>
+            <th style="min-width:90px">Estado</th>
+            <th style="min-width:90px">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-liquidacion-fs"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: LIQUIDACION FULLSCREEN ══════════════════════════════ -->
+<div class="modal-overlay" id="modal-liquidacion-fs" style="align-items:flex-start;padding:20px">
+  <div class="modal-card" style="max-width:100%;width:100%;max-height:90vh;overflow-y:auto;margin-top:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:var(--display);font-size:18px;font-weight:700">Cuadro de amortización</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label class="btn btn-outline btn-sm" style="cursor:pointer">
+          ⬆ Importar Excel
+          <input type="file" id="import-excel-cuotas-fs" accept=".xlsx,.xls" style="display:none" onchange="importarCuotasExcelFS(this)"/>
+        </label>
+        <button class="btn btn-outline btn-sm" onclick="abrirAgregarAdicional()">+ Adicional</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="openModal('modal-subir-doc')">📎 Doc</button>
+        <button onclick="closeModal('modal-liquidacion-fs')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 12px;font-size:16px;cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div id="import-excel-msg-fs" style="margin-bottom:8px"></div>
+    <div style="overflow-x:auto">
+      <table class="data-table" id="table-liquidacion-fs" style="min-width:1000px;width:100%">
+        <thead>
+          <tr>
+            <th>#</th><th>Vencimiento</th><th>Cuota</th><th>Amortización</th>
+            <th>Interés</th><th>IVA</th><th>Seguro</th><th>Adicionales</th>
+            <th>Total</th><th>Saldo restante</th><th>Estado</th><th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-liquidacion-fs"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -3566,6 +3639,81 @@ async function subirDocumentoBackend() {
   } finally {
     document.getElementById('btn-subir-doc').disabled = false;
   }
+}
+
+function abrirLiquidacionFullscreen() {
+  document.getElementById('lfs-titulo').textContent = 'Cuadro de amortización';
+  openModal('modal-liquidacion-fs');
+  loadLiquidacionFS();
+}
+
+async function loadLiquidacionFS() {
+  const { data: cuotas } = await sbAdmin.from('cuotas')
+    .select('*')
+    .eq('contrato_id', currentLeaseId)
+    .order('numero', { ascending: true });
+
+  const tbody = document.getElementById('tbody-liquidacion-fs');
+  if (!cuotas || !cuotas.length) {
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin cuotas registradas. Importá el Excel o cargalas manualmente.</td></tr>';
+    return;
+  }
+
+  const estadoColors = { paga: 'badge-green', pendiente: 'badge-gray', vencida: 'badge-red' };
+  const fmt = n => n ? Number(n).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  
+  let html = '';
+  cuotas.forEach(c => {
+    const cuotaBase = parseFloat(c.monto || 0);
+    const seguro = parseFloat(c.seguro || 0);
+    const adicion = parseFloat(c.adicionales_monto || 0);
+    const total = c.total_con_adicionales || (cuotaBase + seguro + adicion);
+    const isPaga = c.estado === 'paga';
+
+    html += '<tr style="' + (isPaga ? 'background:#f0fdf4' : '') + '">';
+    html += '<td class="mono" style="font-size:12px">' + String(c.numero).padStart(2,'0') + '</td>';
+    html += '<td class="mono" style="font-size:12px;white-space:nowrap">' + (c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—') + '</td>';
+    html += '<td style="font-size:12px;font-weight:700;font-family:var(--mono)">' + fmt(c.monto) + '</td>';
+    html += '<td style="font-size:12px;color:var(--blue);font-family:var(--mono)">' + fmt(c.capital) + '</td>';
+    html += '<td style="font-size:12px;color:var(--orange);font-family:var(--mono)">' + fmt(c.interes) + '</td>';
+    html += '<td style="font-size:12px;color:var(--text3);font-family:var(--mono)">' + fmt(c.iva) + '</td>';
+    html += '<td style="font-size:12px;color:var(--green);font-family:var(--mono)">' + fmt(c.seguro) + '</td>';
+    html += '<td style="font-size:12px;color:#a855f7;font-family:var(--mono)">' + fmt(c.adicionales_monto) + '</td>';
+    html += '<td style="font-size:12px;font-weight:800;font-family:var(--mono)">' + fmt(total) + '</td>';
+    html += '<td style="font-size:12px;font-family:var(--mono)">' + fmt(c.saldo_restante) + '</td>';
+    html += '<td><div class="badge ' + (estadoColors[c.estado] || 'badge-gray') + '" style="font-size:10px">' + c.estado + '</div></td>';
+    html += '<td>';
+    if (!isPaga) {
+      html += '<button id="btnfs-' + c.id.replace(/-/g,'') + '" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">✓ Pagar</button>';
+    } else {
+      html += '<span style="font-size:11px;color:var(--green)">' + (c.fecha_pago ? formatFecha(c.fecha_pago) : '✓') + '</span>';
+    }
+    html += '</td>';
+    html += '</tr>';
+    if (isPaga && c.fecha_pago) {
+      html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + '</td></tr>';
+    }
+  });
+  tbody.innerHTML = html;
+
+  // Attach click handlers
+  cuotas.forEach(c => {
+    if (c.estado !== 'paga') {
+      const btn = document.getElementById('btnfs-' + c.id.replace(/-/g,''));
+      if (btn) btn.onclick = () => abrirMarcarPaga(c.id, c.numero);
+    }
+  });
+}
+
+async function importarCuotasExcelFS(input) {
+  // Redirect to main import function but update FS table
+  const origMsgEl = document.getElementById('import-excel-msg');
+  const fsMsgEl = document.getElementById('import-excel-msg-fs');
+  // Temporarily swap msg element
+  const origInput = document.getElementById('import-excel-cuotas');
+  await importarCuotasExcel(input);
+  // Reload fullscreen table
+  loadLiquidacionFS();
 }
 
 // INIT
