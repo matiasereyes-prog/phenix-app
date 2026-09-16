@@ -4432,6 +4432,7 @@ async function generarContratoPDF() {
         const lines = doc.splitTextToSize(para, textW);
         lines.forEach((line, li) => {
           doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+          doc.setDrawColor(51,51,51);
           const isLast = li === lines.length - 1;
           if (isLast || lines.length === 1) {
             doc.text(line, ML, y);
@@ -4609,7 +4610,7 @@ async function generarContratoPDF() {
     doc.text('Representante del Tomador', ML + 130, y + 5, { align:'center' });
     doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
     doc.text('Daniel Mario Cardoni', ML + 35, y + 10, { align:'center' });
-    doc.text(u.nombre || '—', ML + 130, y + 10, { align:'center' });
+    doc.text(contrato.representante_tomador || u.nombre || '—', ML + 130, y + 10, { align:'center' });
     doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(150,150,150);
     doc.text('PHENIX LEASING S.A.', ML + 35, y + 15, { align:'center' });
     doc.text(u.nombre || '—', ML + 130, y + 15, { align:'center' });
