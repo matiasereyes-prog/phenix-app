@@ -4417,7 +4417,6 @@ async function generarContratoPDF() {
     ];
 
     clausulas.forEach(([title, paragraphs]) => {
-      // Each entry can be a single string or array of strings (paragraphs)
       const paras = Array.isArray(paragraphs) ? paragraphs : [paragraphs];
       
       if (title) {
@@ -4428,17 +4427,15 @@ async function generarContratoPDF() {
       
       paras.forEach(para => {
         if (!para) return;
-        if (y > H - 25) { pageNum++; addPage(pageNum); y = MT + 8; }
-        doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+        if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 8; }
         const textW = W - ML - MR;
         const lines = doc.splitTextToSize(para, textW);
         lines.forEach((line, li) => {
+          doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
           const isLast = li === lines.length - 1;
           if (isLast || lines.length === 1) {
-            // Last line or single line: left aligned
             doc.text(line, ML, y);
           } else {
-            // Justify: spread words to fill width
             const words = line.trim().split(' ').filter(w => w);
             if (words.length <= 1) {
               doc.text(line, ML, y);
@@ -4446,19 +4443,19 @@ async function generarContratoPDF() {
               const lineW = doc.getTextWidth(words.join(' '));
               const space = (textW - lineW) / (words.length - 1);
               let xPos = ML;
-              words.forEach((word, wi) => {
+              words.forEach(word => {
                 doc.text(word, xPos, y);
                 xPos += doc.getTextWidth(word) + doc.getTextWidth(' ') + space;
               });
             }
           }
-          y += 4.2;
-          if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 8; }
+          y += 3.8;
+          if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 10; }
         });
-        y += 5;
+        y += 4;
       });
       y += 2;
-    });
+    });;
 
     // ── ANEXO I ───────────────────────────────────────────────────────
     pageNum++; addPage(pageNum); y = MT + 4;
