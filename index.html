@@ -213,6 +213,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('clientes')">Clientes</button>
         <button class="nav-btn" onclick="showView('leads')">Leads</button>
         <button class="nav-btn" onclick="showView('vehiculos')">Vehículos</button>
+        <button class="nav-btn" onclick="showView('modelos')">Catálogo</button>
         <button class="nav-btn" onclick="showView('seguros')">Seguros</button>
         <button class="nav-btn" onclick="showView('documentos')">Documentos</button>
         <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
@@ -384,6 +385,22 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         </div>
       </div>
     </div>
+
+  <!-- MODELOS DISPONIBLES -->
+  <div id="view-modelos" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Catálogo de modelos</div>
+      <button class="btn btn-dark" onclick="openModal('modal-nuevo-modelo')">+ Nuevo modelo</button>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Marca</th><th>Modelo</th><th>Segmento</th><th>Años</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="tbody-modelos"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <!-- SEGUROS -->
   <div id="view-seguros" style="display:none">
@@ -1449,6 +1466,54 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   </div>
 </div>
 
+<!-- ══ MODAL: NUEVO MODELO ═════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-modelo">
+  <div class="modal-card" style="max-width:500px">
+    <div class="modal-title">Nuevo modelo</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Marca</label>
+        <input class="form-input" id="nm-marca" placeholder="Toyota, Ford, BMW..."/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Modelo</label>
+        <input class="form-input" id="nm-modelo" placeholder="GR86, Ranger XLT..."/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Segmento</label>
+        <select class="form-select" id="nm-segmento">
+          <option value="pickup">Pickup</option>
+          <option value="suv">SUV</option>
+          <option value="sedan">Sedán / Hatchback</option>
+          <option value="comercial">Comercial</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Orden en lista</label>
+        <input class="form-input" type="number" id="nm-orden" placeholder="0" value="0"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Año desde</label>
+        <input class="form-input" type="number" id="nm-anio-desde" placeholder="2022"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Año hasta</label>
+        <input class="form-input" type="number" id="nm-anio-hasta" placeholder="2026"/>
+      </div>
+    </div>
+    <div id="nm-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-nuevo-modelo')">Cancelar</button>
+      <button class="btn btn-dark" onclick="crearModelo()">Agregar modelo</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1615,16 +1680,17 @@ async function loadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','seguros','documentos','usuarios','logs'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','seguros','documentos','usuarios','logs'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
   if (view === 'leads') { loadLeads(); loadLeadsStats(); }
   if (view === 'vehiculos') loadVehiculos();
+  if (view === 'modelos') loadModelos();
   if (view === 'seguros') loadSeguros();
   if (view === 'documentos') loadDocumentosBackend();
   if (view === 'usuarios') loadUsuarios();
@@ -3871,6 +3937,112 @@ async function cambiarEstadoDoc(id, estado) {
   showToast('✓ Documento ' + estado);
   await registrarLog('cambiar_estado_doc', 'Cambio estado documento ' + id + ' a ' + estado);
   loadDocumentosBackend();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CATÁLOGO DE MODELOS
+// ══════════════════════════════════════════════════════════════════
+async function loadModelos() {
+  const { data } = await sbAdmin.from('modelos_disponibles').select('*').order('marca').order('orden');
+  const tbody = document.getElementById('tbody-modelos');
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-text">Sin modelos en el catálogo.</div></div></td></tr>';
+    return;
+  }
+
+  const segmentoLabels = { pickup:'🛻 Pickup', suv:'🚙 SUV', sedan:'🚗 Sedán', comercial:'🚐 Comercial', otro:'📦 Otro' };
+  let html = '';
+  data.forEach(m => {
+    html += '<tr>';
+    html += '<td class="bold">' + m.marca + '</td>';
+    html += '<td>' + m.modelo + '</td>';
+    html += '<td><div class="badge badge-blue" style="font-size:10px">' + (segmentoLabels[m.segmento] || m.segmento || '—') + '</div></td>';
+    html += '<td class="mono" style="font-size:12px">' + (m.anio_desde || '—') + ' – ' + (m.anio_hasta || '—') + '</td>';
+    html += '<td>' + (m.activo ? '<div class="badge badge-green">Activo</div>' : '<div class="badge badge-gray">Inactivo</div>') + '</td>';
+    html += '<td style="display:flex;gap:6px" id="mod-btns-' + m.id.replace(/-/g,'') + '"></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+
+  data.forEach(m => {
+    const cell = document.getElementById('mod-btns-' + m.id.replace(/-/g,''));
+    if (!cell) return;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-outline btn-sm';
+    editBtn.textContent = 'Editar';
+    editBtn.onclick = () => editarModelo(m.id);
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'btn btn-outline btn-sm';
+    toggleBtn.style.color = m.activo ? 'var(--red)' : 'var(--green)';
+    toggleBtn.textContent = m.activo ? 'Desactivar' : 'Activar';
+    toggleBtn.onclick = () => toggleModelo(m.id, m.activo);
+    cell.appendChild(editBtn);
+    cell.appendChild(toggleBtn);
+  });
+}
+
+async function crearModelo() {
+  const marca = document.getElementById('nm-marca').value.trim();
+  const modelo = document.getElementById('nm-modelo').value.trim();
+  const segmento = document.getElementById('nm-segmento').value;
+  const orden = parseInt(document.getElementById('nm-orden').value) || 0;
+  const anio_desde = parseInt(document.getElementById('nm-anio-desde').value) || null;
+  const anio_hasta = parseInt(document.getElementById('nm-anio-hasta').value) || null;
+
+  if (!marca || !modelo) {
+    document.getElementById('nm-msg').innerHTML = '<div class="alert alert-error">Marca y modelo son obligatorios.</div>';
+    return;
+  }
+
+  const { error } = await sbAdmin.from('modelos_disponibles').insert({ marca, modelo, segmento, orden, anio_desde, anio_hasta, activo: true });
+  if (error) { document.getElementById('nm-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>'; return; }
+
+  showToast('✓ Modelo agregado al catálogo');
+  closeModal('modal-nuevo-modelo');
+  loadModelos();
+}
+
+async function editarModelo(id) {
+  const { data: m } = await sbAdmin.from('modelos_disponibles').select('*').eq('id', id).single();
+  if (!m) return;
+  document.getElementById('nm-marca').value = m.marca;
+  document.getElementById('nm-modelo').value = m.modelo;
+  document.getElementById('nm-segmento').value = m.segmento || 'sedan';
+  document.getElementById('nm-orden').value = m.orden || 0;
+  document.getElementById('nm-anio-desde').value = m.anio_desde || '';
+  document.getElementById('nm-anio-hasta').value = m.anio_hasta || '';
+  document.querySelector('#modal-nuevo-modelo .modal-title').textContent = 'Editar modelo';
+  const btn = document.querySelector('#modal-nuevo-modelo .btn-dark');
+  btn.textContent = 'Guardar cambios';
+  btn.onclick = () => guardarModelo(id);
+  document.getElementById('nm-msg').innerHTML = '';
+  openModal('modal-nuevo-modelo');
+}
+
+async function guardarModelo(id) {
+  const { error } = await sbAdmin.from('modelos_disponibles').update({
+    marca: document.getElementById('nm-marca').value.trim(),
+    modelo: document.getElementById('nm-modelo').value.trim(),
+    segmento: document.getElementById('nm-segmento').value,
+    orden: parseInt(document.getElementById('nm-orden').value) || 0,
+    anio_desde: parseInt(document.getElementById('nm-anio-desde').value) || null,
+    anio_hasta: parseInt(document.getElementById('nm-anio-hasta').value) || null,
+  }).eq('id', id);
+
+  if (error) { document.getElementById('nm-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>'; return; }
+  showToast('✓ Modelo actualizado');
+  closeModal('modal-nuevo-modelo');
+  document.querySelector('#modal-nuevo-modelo .modal-title').textContent = 'Nuevo modelo';
+  const btn = document.querySelector('#modal-nuevo-modelo .btn-dark');
+  btn.textContent = 'Agregar modelo';
+  btn.onclick = crearModelo;
+  loadModelos();
+}
+
+async function toggleModelo(id, activo) {
+  await sbAdmin.from('modelos_disponibles').update({ activo: !activo }).eq('id', id);
+  showToast(activo ? 'Modelo desactivado' : '✓ Modelo activado');
+  loadModelos();
 }
 
 // INIT
