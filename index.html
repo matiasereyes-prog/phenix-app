@@ -3235,73 +3235,54 @@ async function importarCuotasExcel(input) {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    if (!rows || rows.length < 2) {
-      msgEl.innerHTML = '<div class="alert alert-error">El archivo está vacío o no tiene datos.</div>';
+    // Leer con objetos para mapear por nombre de columna directamente
+    const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+    if (!jsonRows || !jsonRows.length) {
+      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron datos.</div>';
       return;
     }
 
-    // Helper para parsear números — null si vacío o guión
     const pn = v => {
       if (v === null || v === undefined || v === '' || v === '-' || v === '—') return null;
       const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
       return isNaN(n) ? null : n;
     };
 
-    // El template Phenix tiene estas columnas en orden fijo:
-    // 0: N° Cuota, 1: Fecha vencimiento, 2: Cuota (importe), 3: Amortización,
-    // 4: Interés, 5: IVA, 6: Seguro, 7: Adicionales, 8: Saldo restante
-    // Si el header no matchea, usamos posición fija.
+    // Detectar nombres de columnas del primer objeto
+    const keys = Object.keys(jsonRows[0]);
+    console.log('Excel columns found:', keys);
 
-    // Detectar índices por nombre de columna
-        const norm = s => {
-      const str = String(s || '').toLowerCase();
-      const map = {'á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n','ü':'u','°':''};
-      return str.split('').map(c => map[c] || c).join('').replace(/[^a-z0-9 ]/g, '').trim();
-    };
+    // Encontrar cada columna buscando palabras clave
+    const findKey = (...words) => keys.find(k => words.some(w => k.toLowerCase().includes(w.toLowerCase()))) || null;
 
-    const hdr = rows[0].map(norm);
+    const kNum     = findKey('cuota', 'num', '#', 'n°') || keys[0];
+    const kFecha   = findKey('fecha') || keys[1];
+    const kMonto   = findKey('importe', 'monto') || keys[2];
+    const kCapital = findKey('amort', 'capital') || keys[3];
+    const kInteres = findKey('inter') || keys[4];
+    const kIva     = findKey('iva') || keys[5];
+    const kSeguro  = findKey('seguro') || keys[6];
+    const kAdicion = findKey('adicional') || keys[7];
+    const kSaldo   = findKey('saldo') || keys[8];
 
-    const findExact = (...keys) => {
-      for (const k of keys) {
-        const i = hdr.indexOf(norm(k));
-        if (i >= 0) return i;
-      }
-      return -1;
-    };
-
-    // Buscar cada columna — más específico primero para evitar conflictos
-    const iNum     = findExact('n cuota', 'n  cuota', 'numero', 'num') >= 0 ? findExact('n cuota', 'n  cuota', 'numero', 'num') : 0;
-    const iFecha   = findExact('fecha vencimiento', 'fecha') >= 0 ? findExact('fecha vencimiento', 'fecha') : 1;
-    const iMonto   = findExact('cuota  importe', 'cuota importe', 'importe') >= 0 ? findExact('cuota  importe', 'cuota importe', 'importe') : 2;
-    const iCapital = findExact('amortizacion', 'amort', 'capital') >= 0 ? findExact('amortizacion', 'amort', 'capital') : 3;
-    const iInteres = findExact('interes', 'int periodo', 'int period') >= 0 ? findExact('interes', 'int periodo', 'int period') : 4;
-    const iIva     = findExact('iva') >= 0 ? findExact('iva') : 5;
-    const iSeguro  = findExact('seguro') >= 0 ? findExact('seguro') : 6;
-    const iAdicion = findExact('adicionales', 'adicion') >= 0 ? findExact('adicionales', 'adicion') : 7;
-    const iSaldo   = findExact('saldo restante', 'saldo') >= 0 ? findExact('saldo restante', 'saldo') : 8;
+    console.log('Column mapping:', { kNum, kFecha, kMonto, kCapital, kInteres, kSaldo });
 
     const cuotasData = [];
-    for (let i = 1; i < rows.length; i++) {
-      const row = [...rows[i]]; // copy
-      // Asegurar que la fila tiene suficientes elementos
-      while (row.length <= Math.max(iNum, iFecha, iMonto, iCapital, iInteres, iIva, iSeguro, iAdicion, iSaldo)) {
-        row.push(null);
-      }
-
-      const num = parseInt(row[iNum]);
+    for (const row of jsonRows) {
+      const num = parseInt(row[kNum]);
       if (!isNaN(num) && num >= 1 && num <= 360) {
         const cuota = {
           numero: num,
-          fecha_vencimiento: excelDateToString(row[iFecha]),
-          monto:             pn(row[iMonto]),
-          capital:           pn(row[iCapital]),
-          interes:           pn(row[iInteres]),
-          iva:               pn(row[iIva]),
-          seguro:            pn(row[iSeguro]),
-          adicionales_monto: pn(row[iAdicion]),
-          saldo_restante:    pn(row[iSaldo]),
+          fecha_vencimiento: excelDateToString(row[kFecha]),
+          monto:             pn(row[kMonto]),
+          capital:           pn(row[kCapital]),
+          interes:           pn(row[kInteres]),
+          iva:               pn(row[kIva]),
+          seguro:            pn(row[kSeguro]),
+          adicionales_monto: pn(row[kAdicion]),
+          saldo_restante:    pn(row[kSaldo]),
         };
         if (cuota.monto !== null || cuota.capital !== null) {
           cuotasData.push(cuota);
@@ -3310,11 +3291,11 @@ async function importarCuotasExcel(input) {
     }
 
     if (!cuotasData.length) {
-      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron cuotas. Verificá que el archivo use el template Phenix.</div>';
+      msgEl.innerHTML = '<div class="alert alert-error">No se encontraron cuotas válidas.</div>';
       return;
     }
 
-    if (!confirm('Se encontraron ' + cuotasData.length + ' cuotas. ¿Actualizar el cuadro de amortización?')) {
+    if (!confirm('Se encontraron ' + cuotasData.length + ' cuotas. Confirmar importación?')) {
       input.value = '';
       msgEl.innerHTML = '';
       return;
@@ -3349,7 +3330,7 @@ async function importarCuotasExcel(input) {
     await registrarLog('importar_cuotas', 'Importo ' + cuotasData.length + ' cuotas para lease ' + currentLeaseId);
 
   } catch(e) {
-    msgEl.innerHTML = '<div class="alert alert-error">Error al procesar: ' + e.message + '</div>';
+    msgEl.innerHTML = '<div class="alert alert-error">Error: ' + e.message + '</div>';
   }
 }
 
