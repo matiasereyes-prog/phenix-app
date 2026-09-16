@@ -4413,61 +4413,7 @@ async function generarContratoPDF() {
       ['Derecho Aplicable', 'El Contrato y los derechos y obligaciones de las partes emergentes del mismo se regirán por las leyes de la República Argentina.'],
       ['Varios', ['Los Anexos I y II, en su versión inicial con Valores Presupuestados y en su versión final con Valores Finales, son considerados como parte integrante de este Contrato.', 'Las Partes constituyen domicilios en los indicados en el encabezamiento y en el Anexo I. Los domicilios sólo pueden ser modificados previa notificación por escrito a la otra parte.', 'Todas las comunicaciones o notificaciones que realicen las partes vinculadas con el Contrato serán consideradas válidas si son realizadas por escrito y en los domicilios indicados.', 'Si a partir de celebrado este contrato, las condiciones económicas variaran sustancialmente con incidencia en el presente contrato, el Dador podrá proponer un nuevo canon que compense dichos cambios y el Tomador deberá aceptarlo salvo que pueda demostrar error manifiesto en el cálculo realizado por el Dador.', 'La nulidad de una cláusula del Contrato no implicará la nulidad del resto del Contrato y las partes harán sus mejores esfuerzos para sustituir la cláusula nula por otra válida de similar contenido económico.', 'El Contrato sólo puede ser modificado por medio de acuerdo escrito firmado por las partes.', 'El Contrato prevalece sobre otro acuerdo verbal o escrito de celebrado entre partes relacionado con el objeto del Contrato.', 'Los epígrafes usados en el Contrato son sólo para fines de identificación y no deben ser tenidos en cuenta para la interpretación de los derechos y obligaciones que nacen del mismo.', 'El Dador tendrá el derecho de ceder, prendar o de otro modo disponer en forma total o parcial cualquiera de sus derechos conforme al presente Contrato, sin necesidad previa de notificación al Tomador.', 'El Dador queda facultado para solicitar en forma individual sin la intervención del Tomador la cancelación del contrato cuando correspondiere ante el registro pertinente y a suscribir toda la documentación respectiva con gastos a cargo del Tomador.']],
       ['Impuesto a los sellos', 'Las partes establecen, que por la presente operación corresponde el pago del Impuesto de Sellos y manifiestan que será abonado en tiempo y forma; desobligando y eximiendo al Escribano de cualquier responsabilidad o contingencia derivada de dicho impuesto.'],
-      ['Fianza', ['El Sr. Eduardo Osvaldo Roselli, DNI 20.545.040 con domicilio en Suipacha 1294 piso 5° Dpto. A de la Ciudad Autónoma de Buenos Aires, en adelante “el Fiador”, se constituye en fiador, liso y llano pagador, sin interpelación previa y con renuncia a los beneficios de excusión y división de todas las obligaciones asumidas por el Tomador bajo el presente Contrato de Leasing. La presente fianza es incondicionada e irrevocable.', 'La Fianza otorgada se extiende a todo monto adeudado por el Tomador al Dador, sea en concepto de capital, intereses (moratorios y/o punitorios), multas y/o cualquier obligación, cualquiera fuese la naturaleza de la misma, originada en el Contrato de Leasing y respecto de los daños y perjuicios que el Deudor pudiese ocasionar al Dador con motivo del incumplimiento de sus obligaciones bajo el Contrato de Leasing, sean estos directos y/o indirectos, actuales o futuros. Asimismo, la presente fianza se extiende a todos los gastos, impuestos, costas, franquicias, costos y honorarios de profesionales que fuesen necesarios para la ejecución de', 'La Partes acuerdan que no serán aplicables a  las disposiciones de los artículos 1597 del Código Civil y Comercial de la Nación, renunciando el Fiador a los derechos que pudiese tener conforme dichos artículos.', 'En el supuesto de ejecución judicial de , el Dador podrá ejecutar directamente al Fiador sin necesidad de intimación previa al Tomador, renunciado el Fiador a los beneficios del artículo 1583 del Código Civil y Comercial de la Nación. El Fiador renuncia a dar en embargo los bienes del Tomador en el supuesto que el Fiador fuese ejecutado con anterioridad al Tomador. Asimismo, el Fiador renuncia a dar por extinguida su fianza en los supuestos previstos en el artículo 1596, inciso a), b) c) y d) del Código de Civil y Comercial de la Nación.', 'se mantendrá en vigor hasta el momento en que la totalidad de las obligaciones adeudadas al Dador bajo el Contrato de Préstamo y el presente Contrato de Fianza hayan sido totalmente canceladas a satisfacción del Dador, sin perjuicio del tiempo que haya transcurrido desde el otorgamiento del presente Contrato de Fianza.', 'Las Partes dejan constancia que el Fiador renuncia expresamente a los beneficios de excusión y división y que dado su carácter de principal pagador deberá ser considerado como codeudor solidario (art. 1591 del Código Civil y Comercial de la Nación).', 'Las Partes reconocen que el presente instrumento acompañado de un dictamen de contador público matriculado en el cual se exprese el monto de la obligación afianzada, reviste el carácter de título ejecutivo y que el mismo podrá ser ejecutado por la Vía Ejecutiva, de conformidad con los términos del artículo 520, 523 y concordantes del Código Procesal Civil y Comercial de la Nación.', 'h)	El Fiador declara y reconoce que la afectación posterior de sus bienes al régimen de de familia no será oponible al Dador quien, mediante el ejercicio del derecho aquí conferido, podrá solicitar la desafectación del mencionado inmueble al Régimen de Bien de Familia y la consecuente ejecución mediante el trámite de subasta judicial.', 'En la Ciudad Autónoma de Buenos Aires en la fecha indicada en el Anexo I, se firman cuatro ejemplares de un mismo tenor y a un solo efecto.', '…………………………………………..', 'Apoderado', 'Daniel Mario Cardoni', 'PHENIX LEASING S.A.', 'Dador', '…………………………………………..', 'Apoderado', 'Carlos Alberto Granero', 'GRUPO MOLIERE S.A.', 'Tomador', '…………………………………………..', 'Carlos Alberto Granero', 'Fiador']]
-    ];
 
-    clausulas.forEach(([title, paragraphs]) => {
-      const paras = Array.isArray(paragraphs) ? paragraphs : [paragraphs];
-      
-      if (title) {
-        if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 8; }
-        doc.setFontSize(9.5); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
-        doc.text(title, ML, y); y += 6;
-      }
-      
-      paras.forEach(para => {
-        if (!para) return;
-        if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 8; }
-        const textW = W - ML - MR;
-        const lines = doc.splitTextToSize(para, textW);
-        lines.forEach((line, li) => {
-          doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
-          doc.setDrawColor(51,51,51);
-          const isLast = li === lines.length - 1;
-          if (isLast || lines.length === 1) {
-            doc.text(line, ML, y);
-          } else {
-            const words = line.trim().split(' ').filter(w => w);
-            if (words.length <= 1) {
-              doc.text(line, ML, y);
-            } else {
-              const lineW = doc.getTextWidth(words.join(' '));
-              const space = (textW - lineW) / (words.length - 1);
-              if (space < 0 || space > 8) {
-                // Don't justify if words would overlap or gaps too large
-                doc.text(line, ML, y);
-              } else {
-                let xPos = ML;
-                words.forEach(word => {
-                  doc.text(word, xPos, y);
-                  xPos += doc.getTextWidth(word) + doc.getTextWidth(' ') + space;
-                });
-              }
-            }
-          }
-          y += 3.8;
-          if (y > H - 30) { pageNum++; addPage(pageNum); y = MT + 10; }
-        });
-        y += 4;
-      });
-      y += 2;
-    });;
-
-    // ── ANEXO I ───────────────────────────────────────────────────────
-    pageNum++; addPage(pageNum); y = MT + 4;
-    y = sectionTitle(ML, y, 'ANEXO I — CONDICIONES PARTICULARES') + 4;
-
-    const a1rows = [
       ['Dador', 'Phenix Leasing S.A. — CUIT 30-70883564-8'],
       ['Domicilio del Dador', 'Carlos Pellegrini 1163 piso 10°, CABA, CP 1009'],
       ['Representante del Dador', 'Daniel Mario Cardoni — DNI 7.672.689'],
@@ -4602,18 +4548,37 @@ async function generarContratoPDF() {
     // ── FIRMAS ─────────────────────────────────────────────────────────
     if (y > H - 60) { pageNum++; addPage(pageNum); y = MT + 4; }
     y = sectionTitle(ML, y, 'FIRMAS') + 20;
+
+    // En la Ciudad Autónoma de Buenos Aires...
+    doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+    const signIntro = 'En la Ciudad Autónoma de Buenos Aires en la fecha indicada en el Anexo I, se firman cuatro ejemplares de un mismo tenor y a un solo efecto.';
+    const signLines = doc.splitTextToSize(signIntro, W - ML - MR);
+    doc.text(signLines, ML, y); y += signLines.length * 4 + 14;
+
+    // Dador firma
     doc.setDrawColor(51,51,51); doc.setLineWidth(0.5);
     doc.line(ML, y, ML + 70, y);
-    doc.line(ML + 95, y, ML + 165, y);
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(150,150,150);
-    doc.text('Apoderado del Dador', ML + 35, y + 5, { align:'center' });
-    doc.text('Representante del Tomador', ML + 130, y + 5, { align:'center' });
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+    doc.text('Apoderado', ML, y + 5);
     doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
-    doc.text('Daniel Mario Cardoni', ML + 35, y + 10, { align:'center' });
-    doc.text(contrato.representante_tomador || u.nombre || '—', ML + 130, y + 10, { align:'center' });
-    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(150,150,150);
-    doc.text('PHENIX LEASING S.A.', ML + 35, y + 15, { align:'center' });
-    doc.text(u.nombre || '—', ML + 130, y + 15, { align:'center' });
+    doc.text('Daniel Mario Cardoni', ML, y + 11);
+    doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+    doc.text('PHENIX LEASING S.A.', ML, y + 17);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+    doc.text('Dador', ML, y + 23);
+    y += 35;
+
+    // Tomador firma
+    doc.setDrawColor(51,51,51); doc.setLineWidth(0.5);
+    doc.line(ML, y, ML + 70, y);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+    doc.text('Apoderado', ML, y + 5);
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(10,10,10);
+    doc.text(contrato.representante_tomador || u.nombre || '—', ML, y + 11);
+    doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(51,51,51);
+    doc.text(u.nombre || '—', ML, y + 17);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+    doc.text('Tomador', ML, y + 23);
 
     // Save
     doc.save('Contrato_Phenix_' + nroContrato + '.pdf');
