@@ -1002,7 +1002,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 </div>
 
 <!-- ══ MODAL: MARCAR CUOTA PAGA ═══════════════════════════════════ -->
-<div class="modal-overlay" id="modal-marcar-paga">
+<div class="modal-overlay" id="modal-marcar-paga" style="z-index:3000">
   <div class="modal-card" style="max-width:480px">
     <div class="modal-title">Marcar cuota como paga</div>
     <input type="hidden" id="mp-cuota-id"/>
@@ -1026,10 +1026,19 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <label class="form-label">Referencia / Comprobante</label>
       <input class="form-input" id="mp-referencia" placeholder="N° de transferencia, TX hash..."/>
     </div>
+    <div class="form-group">
+      <label class="form-label">Adjuntar comprobante (opcional)</label>
+      <div style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer" onclick="document.getElementById('mp-file').click()">
+        <div style="font-size:20px;margin-bottom:4px">📎</div>
+        <div style="font-size:12px;color:var(--text2)">PDF, JPG, PNG — máx. 10MB</div>
+        <input type="file" id="mp-file" style="display:none" accept=".pdf,.jpg,.jpeg,.png"/>
+      </div>
+      <div id="mp-filename" style="font-size:12px;color:var(--green);margin-top:6px"></div>
+    </div>
     <div id="mp-msg"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-marcar-paga')">Cancelar</button>
-      <button class="btn btn-dark" onclick="confirmarPagoCuota()">✓ Confirmar pago</button>
+      <button class="btn btn-dark" id="btn-confirmar-pago" onclick="confirmarPagoCuota()">✓ Confirmar pago</button>
     </div>
   </div>
 </div>
@@ -3552,32 +3561,72 @@ function abrirMarcarPaga(cuotaId, numero) {
   openModal('modal-marcar-paga');
 }
 
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'mp-file') {
+    const file = e.target.files[0];
+    if (file) document.getElementById('mp-filename').textContent = '📎 ' + file.name;
+  }
+});
+
 async function confirmarPagoCuota() {
   const cuotaId = document.getElementById('mp-cuota-id').value;
   const fecha_pago = document.getElementById('mp-fecha').value;
   const medio_pago = document.getElementById('mp-medio').value;
   const referencia = document.getElementById('mp-referencia').value.trim();
+  const file = document.getElementById('mp-file').files[0];
 
   if (!fecha_pago) {
-    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">Ingresa la fecha de pago.</div>';
+    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">Ingresá la fecha de pago.</div>';
     return;
   }
 
-  const { error } = await sbAdmin.from('cuotas').update({
-    estado: 'paga', fecha_pago, medio_pago,
-    tx_hash: referencia || null
-  }).eq('id', cuotaId);
+  document.getElementById('btn-confirmar-pago').disabled = true;
+  document.getElementById('mp-msg').innerHTML = '<div class="alert alert-warning">Procesando...</div>';
 
-  if (error) {
-    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">' + error.message + '</div>';
-    return;
+  try {
+    let comprobanteUrl = null;
+
+    // Subir comprobante si hay archivo
+    if (file) {
+      const { data: lease } = await sbAdmin.from('cuotas').select('contrato_id').eq('id', cuotaId).single();
+      const { data: contrato } = await sbAdmin.from('contratos').select('usuario_id').eq('id', lease.contrato_id).single();
+      const ext = file.name.split('.').pop();
+      const path = contrato.usuario_id + '/comprobante_cuota_' + cuotaId + '_' + Date.now() + '.' + ext;
+      const { error: uploadError } = await sbAdmin.storage.from('documentos').upload(path, file);
+      if (!uploadError) {
+        const { data: { publicUrl } } = sbAdmin.storage.from('documentos').getPublicUrl(path);
+        comprobanteUrl = publicUrl;
+        // Guardar en documentos
+        await sbAdmin.from('documentos').insert({
+          usuario_id: contrato.usuario_id,
+          contrato_id: lease.contrato_id,
+          tipo: 'comprobante_pago',
+          url_storage: publicUrl,
+          observacion: 'Comprobante cuota #' + cuotaId,
+          estado: 'aprobado'
+        });
+      }
+    }
+
+    const { error } = await sbAdmin.from('cuotas').update({
+      estado: 'paga', fecha_pago, medio_pago,
+      tx_hash: referencia || comprobanteUrl || null
+    }).eq('id', cuotaId);
+
+    if (error) throw error;
+
+    showToast('✓ Cuota marcada como paga' + (comprobanteUrl ? ' + comprobante subido' : ''));
+    closeModal('modal-marcar-paga');
+    document.getElementById('mp-file').value = '';
+    document.getElementById('mp-filename').textContent = '';
+    await registrarLog('marcar_paga', 'Marco cuota ' + cuotaId + ' como paga (' + medio_pago + ')');
+    loadLiquidacionFS();
+    loadDashboard();
+  } catch(e) {
+    document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">' + e.message + '</div>';
+  } finally {
+    document.getElementById('btn-confirmar-pago').disabled = false;
   }
-
-  showToast('Cuota marcada como paga');
-  closeModal('modal-marcar-paga');
-  await registrarLog('marcar_paga', 'Marco cuota ' + cuotaId + ' como paga (' + medio_pago + ')');
-  loadLiquidacion();
-  loadDashboard();
 }
 
 // ══════════════════════════════════════════════════════════════════
