@@ -4233,10 +4233,11 @@ async function generarContratoPDF() {
   showToast('Generando contrato PDF...');
 
   try {
-    const { data: contrato } = await sbAdmin.from('contratos')
+    const { data: contrato, error: cErr } = await sbAdmin.from('contratos')
       .select('*, usuarios(nombre, email, cuit, telefono, tipo), vehiculos(marca, modelo, anio, vin, patente)')
-      .eq('id', currentLeaseId).single();
-    if (!contrato) { showToast('Error: contrato no encontrado'); return; }
+      .eq('id', currentLeaseId).maybeSingle();
+    if (cErr) { showToast('Error: ' + cErr.message); console.error(cErr); return; }
+    if (!contrato) { showToast('Error: contrato no encontrado — ID: ' + currentLeaseId); return; }
 
     const { data: cuotas } = await sbAdmin.from('cuotas')
       .select('numero, fecha_vencimiento, monto, iva, interes, capital, saldo_restante')
