@@ -3775,7 +3775,8 @@ async function loadLiquidacionFS() {
     html += '</td>';
     html += '</tr>';
     if (isPaga && c.fecha_pago) {
-      html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + '</td></tr>';
+      const comprobanteLink = c.tx_hash && c.tx_hash.startsWith('http') ? ' · <a href="' + c.tx_hash + '" target="_blank" style="color:var(--green);font-weight:700">📎 Ver comprobante ↗</a>' : (c.tx_hash ? ' · TX: ' + c.tx_hash.slice(0,10) + '...' : '');
+      html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + comprobanteLink + '</td></tr>';
     }
   });
   tbody.innerHTML = html;
