@@ -600,6 +600,67 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">Tasa nominal anual (%)</label>
+        <input class="form-input" type="number" id="nl-tasa" placeholder="15.00" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valor del contrato (sin IVA)</label>
+        <input class="form-input" type="number" id="nl-valor-contrato" placeholder="35000"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Precio del bien (con IVA)</label>
+        <input class="form-input" type="number" id="nl-precio-bien" placeholder="43000"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Garantía / Depósito</label>
+        <input class="form-input" type="number" id="nl-garantia" placeholder="8750"/>
+      </div>
+    </div>
+    <div class="form-divider"></div>
+    <div class="form-section">Datos del tomador para el contrato</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">CUIT del tomador</label>
+        <input class="form-input" id="nl-cuit-tomador" placeholder="30-12345678-9"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Domicilio del tomador</label>
+        <input class="form-input" id="nl-domicilio-tomador" placeholder="Av. Corrientes 1234, CABA"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Representante legal</label>
+        <input class="form-input" id="nl-representante" placeholder="Juan García"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">DNI del representante</label>
+        <input class="form-input" id="nl-dni-rep" placeholder="20.123.456"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Destino del bien</label>
+        <select class="form-select" id="nl-destino">
+          <option value="Particular">Particular</option>
+          <option value="Comercial">Comercial</option>
+          <option value="Transporte">Transporte</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Domicilio de radicación del bien</label>
+        <input class="form-input" id="nl-radicacion" placeholder="Capital Federal"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Aseguradora</label>
+        <input class="form-input" id="nl-aseguradora" placeholder="MAPFRE, Zurich..."/>
+      </div>
+      <div class="form-group">
         <label class="form-label">Fecha de inicio</label>
         <input class="form-input" type="date" id="nl-fecha-inicio"/>
       </div>
@@ -2260,6 +2321,17 @@ async function crearLease() {
       fecha_inicio: fechaInicio || null,
       fecha_fin: fechaFin,
       opcion_compra: opcion ? parseFloat(opcion) : null,
+      tasa_anual: document.getElementById('nl-tasa').value ? parseFloat(document.getElementById('nl-tasa').value) / 100 : null,
+      valor_contrato: document.getElementById('nl-valor-contrato').value ? parseFloat(document.getElementById('nl-valor-contrato').value) : null,
+      precio_bien: document.getElementById('nl-precio-bien').value ? parseFloat(document.getElementById('nl-precio-bien').value) : null,
+      garantia: document.getElementById('nl-garantia').value ? parseFloat(document.getElementById('nl-garantia').value) : null,
+      cuit_tomador: document.getElementById('nl-cuit-tomador').value.trim() || null,
+      domicilio_tomador: document.getElementById('nl-domicilio-tomador').value.trim() || null,
+      representante_tomador: document.getElementById('nl-representante').value.trim() || null,
+      dni_representante: document.getElementById('nl-dni-rep').value.trim() || null,
+      destino_bien: document.getElementById('nl-destino').value || null,
+      domicilio_radicacion: document.getElementById('nl-radicacion').value.trim() || null,
+      aseguradora: document.getElementById('nl-aseguradora').value.trim() || null,
     };
 
     if (tipo === 'escrow_blockchain') {
