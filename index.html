@@ -4442,11 +4442,16 @@ async function generarContratoPDF() {
             } else {
               const lineW = doc.getTextWidth(words.join(' '));
               const space = (textW - lineW) / (words.length - 1);
-              let xPos = ML;
-              words.forEach(word => {
-                doc.text(word, xPos, y);
-                xPos += doc.getTextWidth(word) + doc.getTextWidth(' ') + space;
-              });
+              if (space < 0 || space > 8) {
+                // Don't justify if words would overlap or gaps too large
+                doc.text(line, ML, y);
+              } else {
+                let xPos = ML;
+                words.forEach(word => {
+                  doc.text(word, xPos, y);
+                  xPos += doc.getTextWidth(word) + doc.getTextWidth(' ') + space;
+                });
+              }
             }
           }
           y += 3.8;
