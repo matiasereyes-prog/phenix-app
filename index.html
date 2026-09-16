@@ -4234,7 +4234,7 @@ async function generarContratoPDF() {
 
   try {
     const { data: contrato, error: cErr } = await sbAdmin.from('contratos')
-      .select('*, usuarios(nombre, email, cuit, telefono, tipo), vehiculos(marca, modelo, anio, vin, patente)')
+      .select('*, usuarios!contratos_usuario_id_fkey(nombre, email, cuit, telefono, tipo), vehiculos(marca, modelo, anio, vin, patente)')
       .eq('id', currentLeaseId).maybeSingle();
     if (cErr) { showToast('Error: ' + cErr.message); console.error(cErr); return; }
     if (!contrato) { showToast('Error: contrato no encontrado — ID: ' + currentLeaseId); return; }
