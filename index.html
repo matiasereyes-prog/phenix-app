@@ -214,6 +214,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('leads')">Leads</button>
         <button class="nav-btn" onclick="showView('vehiculos')">Vehículos</button>
         <button class="nav-btn" onclick="showView('seguros')">Seguros</button>
+        <button class="nav-btn" onclick="showView('documentos')">Documentos</button>
         <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
         <button class="nav-btn" onclick="showView('logs')">Logs</button>
       </div>
@@ -398,6 +399,39 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <table class="data-table">
           <thead><tr><th>Vehículo</th><th>Aseguradora</th><th>N° Póliza</th><th>Cobertura</th><th>Vigencia hasta</th><th>Prima neta</th><th>Markup</th><th>Prima total</th><th>Estado</th><th></th></tr></thead>
           <tbody id="tbody-seguros"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCUMENTOS -->
+  <div id="view-documentos" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Documentos</div>
+      <div style="display:flex;gap:8px">
+        <select class="form-select" id="filtro-doc-tipo" onchange="loadDocumentosBackend()" style="width:180px">
+          <option value="">Todos los tipos</option>
+          <option value="dni">DNI</option>
+          <option value="recibo_sueldo">Recibo de sueldo</option>
+          <option value="afip">Constancia AFIP</option>
+          <option value="contrato">Contrato</option>
+          <option value="seguro">Seguro</option>
+          <option value="comprobante_pago">Comprobante pago</option>
+          <option value="otro">Otro</option>
+        </select>
+        <select class="form-select" id="filtro-doc-estado" onchange="loadDocumentosBackend()" style="width:150px">
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="aprobado">Aprobado</option>
+          <option value="rechazado">Rechazado</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Cliente</th><th>Tipo</th><th>Contrato</th><th>Fecha</th><th>Estado</th><th>Archivo</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-documentos"></tbody>
         </table>
       </div>
     </div>
@@ -1581,17 +1615,18 @@ async function loadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','seguros','usuarios','logs'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','seguros','documentos','usuarios','logs'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','seguros','usuarios','logs'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','seguros','documentos','usuarios','logs'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
   if (view === 'leads') { loadLeads(); loadLeadsStats(); }
   if (view === 'vehiculos') loadVehiculos();
   if (view === 'seguros') loadSeguros();
+  if (view === 'documentos') loadDocumentosBackend();
   if (view === 'usuarios') loadUsuarios();
   if (view === 'logs') loadLogs();
 }
@@ -3763,6 +3798,78 @@ async function importarCuotasExcelFS(input) {
   await importarCuotasExcel(input);
   // Reload fullscreen table
   loadLiquidacionFS();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DOCUMENTOS BACKEND
+// ══════════════════════════════════════════════════════════════════
+async function loadDocumentosBackend() {
+  const tipo = document.getElementById('filtro-doc-tipo')?.value || '';
+  const estado = document.getElementById('filtro-doc-estado')?.value || '';
+
+  let query = sbAdmin.from('documentos')
+    .select('*, usuarios(nombre, email), contratos(id)')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (tipo) query = query.eq('tipo', tipo);
+  if (estado) query = query.eq('estado', estado);
+
+  const { data, error } = await query;
+  const tbody = document.getElementById('tbody-documentos');
+
+  if (error || !data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📁</div><div class="empty-text">Sin documentos registrados.</div></div></td></tr>';
+    return;
+  }
+
+  const tipoLabels = { dni:'DNI', recibo_sueldo:'Recibo de sueldo', afip:'Constancia AFIP', estatuto:'Estatuto', contrato:'Contrato', seguro:'Seguro', comprobante_pago:'Comprobante pago', acta_entrega:'Acta entrega', otro:'Otro' };
+  const estadoBadgeMap = { pendiente:'badge-orange', aprobado:'badge-green', rechazado:'badge-red' };
+
+  let html = '';
+  data.forEach(d => {
+    const nombre = d.usuarios?.nombre || d.usuarios?.email || '—';
+    const tipo = tipoLabels[d.tipo] || d.tipo;
+    const fecha = d.created_at ? new Date(d.created_at).toLocaleDateString('es-AR') : '—';
+    const contrato = d.contratos?.id ? d.contratos.id.slice(0,8) + '...' : '—';
+    const ext = d.url_storage ? d.url_storage.split('.').pop().toLowerCase() : '';
+    const icono = ext === 'pdf' ? '📄' : ['jpg','jpeg','png'].includes(ext) ? '🖼️' : '📎';
+
+    html += '<tr>';
+    html += '<td class="bold">' + nombre + '</td>';
+    html += '<td><div class="badge badge-blue" style="font-size:10px">' + tipo + '</div></td>';
+    html += '<td class="mono" style="font-size:11px">' + contrato + '</td>';
+    html += '<td class="mono" style="font-size:12px">' + fecha + '</td>';
+    html += '<td><div class="badge ' + (estadoBadgeMap[d.estado] || 'badge-gray') + '">' + d.estado + '</div></td>';
+    html += '<td>' + (d.url_storage ? '<a href="' + d.url_storage + '" target="_blank" style="color:var(--blue);text-decoration:none;font-size:13px">' + icono + ' Ver ↗</a>' : '—') + '</td>';
+    html += '<td style="display:flex;gap:6px">';
+    if (d.estado === 'pendiente') {
+      html += '<button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green)" id="docbtn-ap-' + d.id.replace(/-/g,'') + '">✓ Aprobar</button>';
+      html += '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" id="docbtn-re-' + d.id.replace(/-/g,'') + '">✗ Rechazar</button>';
+    } else {
+      html += '<button class="btn btn-outline btn-sm" id="docbtn-rv-' + d.id.replace(/-/g,'') + '">Revertir</button>';
+    }
+    html += '</td></tr>';
+  });
+  tbody.innerHTML = html;
+
+  // Attach handlers
+  data.forEach(d => {
+    const ap = document.getElementById('docbtn-ap-' + d.id.replace(/-/g,''));
+    const re = document.getElementById('docbtn-re-' + d.id.replace(/-/g,''));
+    const rv = document.getElementById('docbtn-rv-' + d.id.replace(/-/g,''));
+    if (ap) ap.onclick = () => cambiarEstadoDoc(d.id, 'aprobado');
+    if (re) re.onclick = () => cambiarEstadoDoc(d.id, 'rechazado');
+    if (rv) rv.onclick = () => cambiarEstadoDoc(d.id, 'pendiente');
+  });
+}
+
+async function cambiarEstadoDoc(id, estado) {
+  const { error } = await sbAdmin.from('documentos').update({ estado }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('✓ Documento ' + estado);
+  await registrarLog('cambiar_estado_doc', 'Cambio estado documento ' + id + ' a ' + estado);
+  loadDocumentosBackend();
 }
 
 // INIT
