@@ -187,16 +187,45 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div class="login-logo-text">Phenix Leasing</div>
     </div>
     <div class="login-title">Backend</div>
-    <div class="login-subtitle">Ingresá con tu email para acceder al sistema.</div>
+    <div class="login-subtitle" id="login-subtitle">Ingresá con tu email para acceder al sistema.</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="nav-btn active" id="tab-login-link" style="flex:1;justify-content:center;display:flex" onclick="switchLoginMode('link')">Magic link</button>
+      <button class="nav-btn" id="tab-login-pass" style="flex:1;justify-content:center;display:flex" onclick="switchLoginMode('password')">Contraseña</button>
+    </div>
     <div class="field-group">
       <label class="field-label">Email</label>
       <input class="field-input" type="email" id="login-email" placeholder="tu@email.com"/>
+    </div>
+    <div class="field-group" id="login-password-group" style="display:none">
+      <label class="field-label">Contraseña</label>
+      <input class="field-input" type="password" id="login-password" placeholder="••••••••"/>
     </div>
     <button class="btn-black" id="btn-login" onclick="sendMagicLink()">
       <span id="login-text">Enviar link de acceso</span>
       <div class="spinner" id="login-spinner" style="display:none"></div>
     </button>
     <div id="login-msg"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: CAMBIO DE CONTRASEÑA OBLIGATORIO ══════════════════════ -->
+<div class="modal-overlay" id="modal-force-password">
+  <div class="modal-card" style="max-width:420px">
+    <div class="modal-title">Definí tu nueva contraseña</div>
+    <div class="modal-subtitle">Por seguridad, tenés que cambiar la contraseña temporal antes de continuar.</div>
+    <div class="field-group">
+      <label class="field-label">Nueva contraseña</label>
+      <input class="field-input" type="password" id="fp-password" placeholder="Mínimo 8 caracteres"/>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Repetir contraseña</label>
+      <input class="field-input" type="password" id="fp-password2" placeholder="Repetí la contraseña"/>
+    </div>
+    <button class="btn-black" id="btn-force-password" onclick="confirmarCambioPassword()">
+      <span id="fp-text">Guardar y continuar</span>
+      <div class="spinner" id="fp-spinner" style="display:none"></div>
+    </button>
+    <div id="fp-msg"></div>
   </div>
 </div>
 
@@ -1732,7 +1761,105 @@ async function sendMagicLink() {
   }
 }
 
-document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') sendMagicLink(); });
+let loginMode = 'link';
+function switchLoginMode(mode) {
+  loginMode = mode;
+  document.getElementById('tab-login-link').classList.toggle('active', mode === 'link');
+  document.getElementById('tab-login-pass').classList.toggle('active', mode === 'password');
+  document.getElementById('login-password-group').style.display = mode === 'password' ? 'block' : 'none';
+  document.getElementById('login-subtitle').textContent = mode === 'password'
+    ? 'Ingresá con tu email y contraseña.'
+    : 'Ingresá con tu email para acceder al sistema.';
+  document.getElementById('login-text').textContent = mode === 'password' ? 'Ingresar' : 'Enviar link de acceso';
+  document.getElementById('btn-login').onclick = mode === 'password' ? loginWithPassword : sendMagicLink;
+  document.getElementById('login-msg').innerHTML = '';
+}
+
+const REAUTH_DIAS = 3;
+
+async function loginWithPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) return;
+  document.getElementById('btn-login').disabled = true;
+  document.getElementById('login-text').style.display = 'none';
+  document.getElementById('login-spinner').style.display = 'inline-block';
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    // Chequear vencimiento de acceso por contraseña (renovado solo por magic link)
+    const { data: usuario } = await sbAdmin.from('usuarios').select('reauth_required_at').eq('email', email).maybeSingle();
+    const vencido = !usuario?.reauth_required_at || new Date(usuario.reauth_required_at) < new Date();
+    if (vencido) {
+      await sb.auth.signOut();
+      document.getElementById('login-msg').innerHTML = '<div class="login-error">⏱️ Tu acceso por contraseña venció. Ingresá con el link de acceso por email para renovarlo.</div>';
+      switchLoginMode('link');
+      return;
+    }
+
+    currentUser = data.user;
+    loadApp();
+  } catch(e) {
+    document.getElementById('login-msg').innerHTML = `<div class="login-error">${e.message === 'Invalid login credentials' ? 'Email o contraseña incorrectos.' : e.message}</div>`;
+  } finally {
+    document.getElementById('btn-login').disabled = false;
+    document.getElementById('login-text').style.display = 'inline';
+    document.getElementById('login-spinner').style.display = 'none';
+  }
+}
+
+async function renovarReauth(email) {
+  try {
+    const vence = new Date(Date.now() + REAUTH_DIAS * 24 * 60 * 60 * 1000).toISOString();
+    await sbAdmin.from('usuarios').update({ reauth_required_at: vence }).eq('email', email);
+  } catch(e) { /* silencioso */ }
+}
+
+async function confirmarCambioPassword() {
+  const p1 = document.getElementById('fp-password').value;
+  const p2 = document.getElementById('fp-password2').value;
+  if (!p1 || p1.length < 8) {
+    document.getElementById('fp-msg').innerHTML = '<div class="login-error">La contraseña debe tener al menos 8 caracteres.</div>';
+    return;
+  }
+  if (p1 !== p2) {
+    document.getElementById('fp-msg').innerHTML = '<div class="login-error">Las contraseñas no coinciden.</div>';
+    return;
+  }
+  document.getElementById('btn-force-password').disabled = true;
+  document.getElementById('fp-text').style.display = 'none';
+  document.getElementById('fp-spinner').style.display = 'inline-block';
+  try {
+    const { error } = await sb.auth.updateUser({ password: p1, data: { must_change_password: false } });
+    if (error) throw error;
+    closeModal('modal-force-password');
+    const { data: { session } } = await sb.auth.getSession();
+    currentUser = session.user;
+    continuarLoadApp();
+  } catch(e) {
+    document.getElementById('fp-msg').innerHTML = `<div class="login-error">${e.message}</div>`;
+  } finally {
+    document.getElementById('btn-force-password').disabled = false;
+    document.getElementById('fp-text').style.display = 'inline';
+    document.getElementById('fp-spinner').style.display = 'none';
+  }
+}
+
+async function generarPasswordUsuario(authId, email, nombre, rol) {
+  if (!authId) { showToast('Este usuario no tiene auth_id — no se puede generar contraseña.'); return; }
+  if (!confirm(`¿Generar una contraseña temporal para ${email} y enviársela por mail?`)) return;
+  const redirectTo = rol === 'lessee' ? 'https://portal.phenixleasing.com' : 'https://app.phenixleasing.com';
+  try {
+    const res = await edgeUsers('set_temp_password', { userId: authId, email, nombre, redirectTo });
+    showToast(res.warning ? '⚠️ ' + res.warning : '✓ Contraseña temporal enviada a ' + email);
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') (loginMode === 'password' ? loginWithPassword() : sendMagicLink()); });
+document.getElementById('login-password').addEventListener('keydown', e => { if(e.key==='Enter') loginWithPassword(); });
 
 async function checkSession() {
   // Handle magic link token from URL hash (when redirected from portal)
@@ -1741,6 +1868,7 @@ async function checkSession() {
     if (session) {
       currentUser = session.user;
       window.history.replaceState(null, '', window.location.pathname);
+      await renovarReauth(session.user.email); // magic link = renueva 3 días de acceso por contraseña
       loadApp();
       return;
     }
@@ -1771,6 +1899,17 @@ async function logout() {
 // LOAD APP
 // ══════════════════════════════════════════════════════════════════
 async function loadApp() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user?.user_metadata?.must_change_password) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'none';
+    openModal('modal-force-password');
+    return;
+  }
+  await continuarLoadApp();
+}
+
+async function continuarLoadApp() {
   // Verificar rol — solo admin y ejecutivo pueden acceder al backend
   const { data: usuario } = await sbAdmin.from('usuarios').select('rol, nombre').eq('email', currentUser.email).single();
   
@@ -2875,6 +3014,7 @@ async function loadUsuarios() {
     <td style="display:flex;gap:6px">
       <button class="btn btn-outline btn-sm" onclick="cambiarRol('${u.id}', '${u.email}', '${u.rol}')">Rol</button>
       <button class="btn btn-outline btn-sm" onclick="reenviarMagicLink('${u.email}', '${u.rol}')" title="Reenviar acceso">📧</button>
+      <button class="btn btn-outline btn-sm" onclick="generarPasswordUsuario('${u.auth_id || ''}', '${u.email}', '${(u.nombre||'').replace(/'/g,"\\'")}', '${u.rol}')" title="Generar contraseña temporal">🔑</button>
       <button class="btn btn-sm" style="background:${u.activo !== false ? 'var(--red-bg)' : 'var(--green-bg)'};color:${u.activo !== false ? 'var(--red)' : 'var(--green)'};border:none" onclick="eliminarUsuario('${u.id}', '${u.email}', ${u.activo !== false})" title="${u.activo !== false ? 'Desactivar' : 'Activar'}">${u.activo !== false ? '🚫' : '✅'}</button>
     </td>
   </tr>`).join('');
