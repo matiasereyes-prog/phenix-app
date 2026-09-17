@@ -1762,7 +1762,7 @@ async function sendMagicLink() {
 }
 
 let loginMode = 'link';
-function switchLoginMode(mode) {
+function switchLoginMode(mode, keepMsg) {
   loginMode = mode;
   document.getElementById('tab-login-link').classList.toggle('active', mode === 'link');
   document.getElementById('tab-login-pass').classList.toggle('active', mode === 'password');
@@ -1772,7 +1772,7 @@ function switchLoginMode(mode) {
     : 'Ingresá con tu email para acceder al sistema.';
   document.getElementById('login-text').textContent = mode === 'password' ? 'Ingresar' : 'Enviar link de acceso';
   document.getElementById('btn-login').onclick = mode === 'password' ? loginWithPassword : sendMagicLink;
-  document.getElementById('login-msg').innerHTML = '';
+  if (!keepMsg) document.getElementById('login-msg').innerHTML = '';
 }
 
 const REAUTH_DIAS = 3;
@@ -1807,7 +1807,7 @@ async function loginWithPassword() {
     if (vencido) {
       await sb.auth.signOut();
       document.getElementById('login-msg').innerHTML = '<div class="login-error">⏱️ Tu acceso por contraseña venció. Ingresá con el link de acceso por email para renovarlo.</div>';
-      switchLoginMode('link');
+      switchLoginMode('link', true);
       return;
     }
 
