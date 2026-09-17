@@ -1891,6 +1891,7 @@ async function checkSession() {
     loadApp();
   }
   sb.auth.onAuthStateChange((event, session) => {
+    console.log('[onAuthStateChange]', event, 'session:', session ? 'presente' : 'null', 'modal abierto:', document.getElementById('modal-force-password').classList.contains('show'));
     if (document.getElementById('modal-force-password').classList.contains('show')) return; // no interferir mientras se define la nueva contraseña
     if (session && !currentUser) { currentUser = session.user; loadApp(); }
     if (!session) { currentUser = null; showLogin(); }
