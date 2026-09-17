@@ -461,6 +461,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Usuarios del sistema</div>
       <button class="btn btn-dark" onclick="openModal('modal-nuevo-usuario')">+ Nuevo usuario</button>
     </div>
+    <div class="search-bar" style="margin-bottom:16px">
+      <input class="search-input" id="search-usuarios" placeholder="Buscar por nombre, email o rol..." oninput="filtrarUsuarios(this.value)"/>
+    </div>
     <div class="card">
       <div style="overflow-x:auto">
         <table class="data-table">
@@ -3508,6 +3511,28 @@ async function convertirLeadACliente() {
     await registrarLog('convertir_lead', 'Convirtió lead ' + lead.email + ' a cliente');
     showToast('✓ Cliente creado y magic link enviado a ' + lead.email);
 
+    // Notificar conversión a las redes para optimizar campañas
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      await fetch('https://xxscdrwkoutlualpveif.supabase.co/functions/v1/conversion-callback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + session.access_token,
+          'apikey': SUPABASE_KEY,
+        },
+        body: JSON.stringify({
+          event_type:  'lead_converted',
+          lead_id:     currentLeadId,
+          email:       lead.email,
+          nombre:      lead.nombre,
+          telefono:    lead.telefono,
+          red_origen:  lead.red_origen || lead.canal,
+          valor_usd:   null,
+        })
+      });
+    } catch(e) { console.warn('Conversion callback error:', e.message); }
+
     // Cerrar modal lead y abrir modal leasing con datos precargados
     closeModal('modal-detalle-lead');
     setTimeout(() => {
@@ -4683,6 +4708,15 @@ async function importarExcelAlContrato(contratoId) {
   } catch(e) {
     console.error('Error importando Excel:', e);
   }
+}
+
+function filtrarUsuarios(q) {
+  const rows = document.querySelectorAll('#tbody-usuarios tr');
+  const term = q.toLowerCase();
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(term) ? '' : 'none';
+  });
 }
 
 // INIT
