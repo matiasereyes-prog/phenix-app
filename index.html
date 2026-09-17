@@ -1833,18 +1833,22 @@ async function confirmarCambioPassword() {
   try {
     // Reafirmar la sesión antes de actualizar (evita "Auth session missing" post-login)
     const { data: { session }, error: sessErr } = await sb.auth.getSession();
+    console.log('[force-password] session:', session, 'error:', sessErr);
     if (sessErr || !session) {
       throw new Error('Se perdió la sesión. Cerrá este mensaje, volvé a loguearte con la contraseña temporal e intentá de nuevo enseguida.');
     }
-    await sb.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    const setRes = await sb.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    console.log('[force-password] setSession result:', setRes);
 
     const { error } = await sb.auth.updateUser({ password: p1, data: { must_change_password: false } });
+    console.log('[force-password] updateUser error:', error);
     if (error) throw error;
     closeModal('modal-force-password');
     const { data: { session: newSession } } = await sb.auth.getSession();
     currentUser = newSession.user;
     continuarLoadApp();
   } catch(e) {
+    console.error('[force-password] catch:', e);
     document.getElementById('fp-msg').innerHTML = `<div class="login-error">${e.message}</div>`;
   } finally {
     document.getElementById('btn-force-password').disabled = false;
