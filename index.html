@@ -1788,6 +1788,17 @@ async function loginWithPassword() {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
+    // Guardamos los tokens apenas se obtienen — no dependemos de que el cliente
+    // los conserve en memoria unos segundos después (se observó un SIGNED_OUT espontáneo).
+    window._pendingAuthSession = data.session;
+    currentUser = data.user;
+
+    if (data.user?.user_metadata?.must_change_password) {
+      document.getElementById('login-screen').style.display = 'none';
+      openModal('modal-force-password');
+      return;
+    }
+
     // Chequear vencimiento de acceso por contraseña (renovado solo por magic link)
     const { data: usuario } = await sbAdmin.from('usuarios').select('reauth_required_at').eq('email', email).maybeSingle();
     const vencido = !usuario?.reauth_required_at || new Date(usuario.reauth_required_at) < new Date();
@@ -1798,7 +1809,6 @@ async function loginWithPassword() {
       return;
     }
 
-    currentUser = data.user;
     loadApp();
   } catch(e) {
     document.getElementById('login-msg').innerHTML = `<div class="login-error">${e.message === 'Invalid login credentials' ? 'Email o contraseña incorrectos.' : e.message}</div>`;
@@ -1831,13 +1841,13 @@ async function confirmarCambioPassword() {
   document.getElementById('fp-text').style.display = 'none';
   document.getElementById('fp-spinner').style.display = 'inline-block';
   try {
-    // Reafirmar la sesión antes de actualizar (evita "Auth session missing" post-login)
-    const { data: { session }, error: sessErr } = await sb.auth.getSession();
-    console.log('[force-password] session:', session, 'error:', sessErr);
-    if (sessErr || !session) {
+    // Usamos los tokens guardados apenas se logueó (no dependemos del estado interno del cliente,
+    // que se observó perdiendo la sesión espontáneamente unos segundos después del login).
+    const pending = window._pendingAuthSession;
+    if (!pending?.access_token) {
       throw new Error('Se perdió la sesión. Cerrá este mensaje, volvé a loguearte con la contraseña temporal e intentá de nuevo enseguida.');
     }
-    const setRes = await sb.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    const setRes = await sb.auth.setSession({ access_token: pending.access_token, refresh_token: pending.refresh_token });
     console.log('[force-password] setSession result:', setRes);
 
     const { error } = await sb.auth.updateUser({ password: p1, data: { must_change_password: false } });
@@ -1914,6 +1924,7 @@ async function logout() {
 async function loadApp() {
   const { data: { session } } = await sb.auth.getSession();
   if (session?.user?.user_metadata?.must_change_password) {
+    if (!window._pendingAuthSession) window._pendingAuthSession = session;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'none';
     openModal('modal-force-password');
