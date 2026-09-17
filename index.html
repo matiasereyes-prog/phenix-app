@@ -1800,7 +1800,9 @@ async function loginWithPassword() {
     }
 
     // Chequear vencimiento de acceso por contraseña (renovado solo por magic link)
-    const { data: usuario } = await sbAdmin.from('usuarios').select('reauth_required_at').eq('email', email).maybeSingle();
+    // Usamos el cliente normal (con RLS), no sbAdmin — se detectó que combinar sbAdmin
+    // justo después de signInWithPassword dispara un SIGNED_OUT espontáneo en el cliente 'sb'.
+    const { data: usuario } = await sb.from('usuarios').select('reauth_required_at').eq('email', email).maybeSingle();
     const vencido = !usuario?.reauth_required_at || new Date(usuario.reauth_required_at) < new Date();
     if (vencido) {
       await sb.auth.signOut();
