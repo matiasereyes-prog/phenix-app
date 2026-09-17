@@ -219,6 +219,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('documentos')">Documentos</button>
         <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
         <button class="nav-btn" onclick="showView('logs')">Logs</button>
+        <button class="nav-btn" onclick="showView('emails')">Emails</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -482,6 +483,25 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <table class="data-table">
           <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead>
           <tbody id="tbody-logs"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAILS -->
+  <div id="view-emails" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Status de emails</div>
+      <button class="btn btn-outline btn-sm" onclick="loadEmailLogs()">↻ Actualizar</button>
+    </div>
+    <div class="search-bar" style="margin-bottom:16px">
+      <input class="search-input" id="search-emails" placeholder="Buscar por destinatario..." oninput="filtrarEmailLogs(this.value)"/>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>Destinatario</th><th>Estado</th><th>Enviado</th><th>Actualizado</th></tr></thead>
+          <tbody id="tbody-emails"></tbody>
         </table>
       </div>
     </div>
@@ -1789,11 +1809,11 @@ async function loadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
@@ -1804,6 +1824,7 @@ function showView(view) {
   if (view === 'documentos') loadDocumentosBackend();
   if (view === 'usuarios') loadUsuarios();
   if (view === 'logs') loadLogs();
+  if (view === 'emails') loadEmailLogs();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2978,6 +2999,44 @@ async function loadLogs() {
     <td><div class="badge badge-blue">${l.accion}</div></td>
     <td style="font-size:13px;color:var(--text2)">${l.detalle}</td>
   </tr>`).join('');
+}
+
+function badgeEmailEstado(estado) {
+  const map = {
+    delivered: 'badge-green',
+    sent: 'badge-blue',
+    opened: 'badge-blue',
+    clicked: 'badge-blue',
+    delayed: 'badge-yellow',
+    bounced: 'badge-red',
+    complained: 'badge-red',
+  };
+  const cls = map[estado] || 'badge-gray';
+  return `<div class="badge ${cls}">${estado || '—'}</div>`;
+}
+
+async function loadEmailLogs() {
+  const { data } = await sbAdmin.from('email_logs').select('*').order('sent_at', { ascending: false }).limit(100);
+  const tbody = document.getElementById('tbody-emails');
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">✉️</div><div class="empty-text">Sin emails registrados todavía.</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(e => `<tr>
+    <td class="mono" style="font-size:12px">${e.destinatario || '—'}</td>
+    <td>${badgeEmailEstado(e.estado)}</td>
+    <td class="mono" style="font-size:11px">${e.sent_at ? new Date(e.sent_at).toLocaleString('es-AR') : '—'}</td>
+    <td class="mono" style="font-size:11px">${e.updated_at ? new Date(e.updated_at).toLocaleString('es-AR') : '—'}</td>
+  </tr>`).join('');
+}
+
+function filtrarEmailLogs(q) {
+  const rows = document.querySelectorAll('#tbody-emails tr');
+  const term = q.toLowerCase();
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(term) ? '' : 'none';
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════
