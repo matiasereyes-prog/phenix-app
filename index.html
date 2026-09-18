@@ -2597,7 +2597,7 @@ async function marcarCondicionInline() {
     const signer = await provider.getSigner();
     const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_token').eq('id', currentLeaseId).single();
     const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
-    const tx = await contract.completeCondition(parseInt(l.lease_id_onchain), parseInt(condIdx), favorLessor);
+    const tx = await contract.completeCondition(parseInt(l.lease_id_onchain), parseInt(condIdx), favorLessor, { gasLimit: 300000 });
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
     await tx.wait();
 
@@ -2923,7 +2923,7 @@ async function completarCondicionStandalone() {
     const signerAddr = await signer.getAddress();
     document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Firmando con ' + signerAddr.slice(0,8) + '...' + signerAddr.slice(-6) + '</div>';
     const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
-    const tx = await contract.completeCondition(parseInt(leaseId), parseInt(condIdx), favorLessor);
+    const tx = await contract.completeCondition(parseInt(leaseId), parseInt(condIdx), favorLessor, { gasLimit: 300000 });
     document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
     await tx.wait();
 
