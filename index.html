@@ -1186,6 +1186,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Condiciones de liberación</div>
       <div id="ld-condiciones" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-bottom:16px"></div>
 
+      <!-- Historial de eventos on-chain -->
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Historial on-chain</div>
+      <div id="ld-eventos-escrow" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;margin-bottom:16px;font-size:11px;color:rgba(255,255,255,0.5)"></div>
+
       <!-- Marcar condicion inline -->
       <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);margin-bottom:10px">Marcar condición cumplida</div>
@@ -2338,6 +2342,21 @@ async function abrirDetalleLease(id) {
     } else {
       condsEl.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">Sin condiciones registradas en Supabase. Consultá el contrato on-chain.</div>';
     }
+
+    // Historial de eventos
+    const eventosEl = document.getElementById('ld-eventos-escrow');
+    const { data: eventos } = await sbAdmin.from('escrow_eventos').select('*').eq('contrato_id', id).order('created_at', { ascending: false }).limit(20);
+    const eventoIcono = { lease_creado: '🆕', fondos_depositados: '💰', condicion_cumplida: '✅', disputa_iniciada: '⚠️', disputa_resuelta: '⚖️', lease_cancelado: '🚫' };
+    const eventoTexto = { lease_creado: 'Lease creado', fondos_depositados: 'Fondos depositados', condicion_cumplida: 'Condición cumplida', disputa_iniciada: 'Disputa iniciada', disputa_resuelta: 'Disputa resuelta', lease_cancelado: 'Lease cancelado' };
+    if (eventos && eventos.length) {
+      eventosEl.innerHTML = eventos.map(e => {
+        const fecha = new Date(e.created_at).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+        const txLink = e.tx_hash ? ' · <a href="https://basescan.org/tx/' + e.tx_hash + '" target="_blank" style="color:#60a5fa;text-decoration:none">TX ↗</a>' : '';
+        return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)">' + (eventoIcono[e.tipo_evento] || '•') + ' ' + fecha + ' — ' + (eventoTexto[e.tipo_evento] || e.tipo_evento) + (e.condicion_index !== null ? ' #' + e.condicion_index : '') + txLink + '</div>';
+      }).join('');
+    } else {
+      eventosEl.innerHTML = '<div style="text-align:center;padding:8px;opacity:0.5">Sin eventos registrados todavía.</div>';
+    }
   } else {
     document.getElementById('ld-escrow-section').style.display = 'none';
   }
@@ -2457,6 +2476,28 @@ async function actualizarEstadoLease() {
 // Recalcula escrow_liberado/escrow_bloqueado del contrato a partir de las
 // condiciones ya cumplidas — el contrato on-chain libera los fondos, pero no
 // existe ningún mecanismo que refleje eso en Supabase salvo este recálculo.
+// Registra un evento en el historial de auditoría del escrow (tabla escrow_eventos).
+// No debe frenar el flujo principal si falla — es un log, no una fuente de verdad.
+async function registrarEventoEscrow(contratoId, leaseIdOnchain, tipoEvento, extra = {}) {
+  try {
+    await sbAdmin.from('escrow_eventos').insert({
+      contrato_id: contratoId,
+      lease_id_onchain: leaseIdOnchain ?? null,
+      tipo_evento: tipoEvento,
+      tx_hash: extra.tx_hash || null,
+      condicion_index: extra.condicion_index ?? null,
+      favor_lessor: extra.favor_lessor ?? null,
+      monto: extra.monto ?? null,
+      token: extra.token ?? null,
+      actor_wallet: extra.actor_wallet || null,
+      actor_usuario_email: currentUser?.email || null,
+      detalle: extra.detalle || null
+    });
+  } catch(e) {
+    console.error('Error registrando evento de escrow:', e);
+  }
+}
+
 async function sincronizarEscrowLiberado(contratoId) {
   try {
     const { data: contrato } = await sbAdmin.from('contratos').select('escrow_monto').eq('id', contratoId).single();
@@ -2513,6 +2554,9 @@ async function marcarCondicionInline() {
     }).eq('contrato_id', currentLeaseId).eq('index_onchain', parseInt(condIdx));
 
     await sincronizarEscrowLiberado(currentLeaseId);
+    await registrarEventoEscrow(currentLeaseId, l.lease_id_onchain, 'condicion_cumplida', {
+      tx_hash: tx.hash, condicion_index: parseInt(condIdx), favor_lessor: favorLessor
+    });
 
     await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + l.lease_id_onchain);
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
@@ -2543,6 +2587,7 @@ async function ejecutarDisputaInline() {
     const tx = await contract.raiseDispute(parseInt(l.lease_id_onchain));
     await tx.wait();
     await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', currentLeaseId);
+    await registrarEventoEscrow(currentLeaseId, l.lease_id_onchain, 'disputa_iniciada', { tx_hash: tx.hash });
     await registrarLog('raise_dispute', 'Inició disputa en lease ' + l.lease_id_onchain);
     showToast('⚠️ Disputa iniciada en blockchain');
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--yellow)">Ver TX ↗</a></div>';
@@ -2583,6 +2628,9 @@ async function resolverDisputaInline() {
       escrow_bloqueado: 0
     }).eq('id', currentLeaseId);
 
+    await registrarEventoEscrow(currentLeaseId, l.lease_id_onchain, 'disputa_resuelta', {
+      tx_hash: tx.hash, favor_lessor: favorLessor, monto: l.escrow_monto
+    });
     await registrarLog('resolve_dispute', 'Resolvió disputa del lease ' + l.lease_id_onchain + ' a favor de ' + (favorLessor ? 'lessor' : 'lessee'));
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Disputa resuelta. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
     showToast('✓ Disputa resuelta en blockchain');
@@ -2827,6 +2875,9 @@ async function completarCondicionStandalone() {
         fecha_cumplimiento: new Date().toISOString().split('T')[0]
       }).eq('contrato_id', contratoId).eq('index_onchain', parseInt(condIdx));
       await sincronizarEscrowLiberado(contratoId);
+      await registrarEventoEscrow(contratoId, leaseId, 'condicion_cumplida', {
+        tx_hash: tx.hash, condicion_index: parseInt(condIdx), favor_lessor: favorLessor, detalle: { origen: 'tab_blockchain' }
+      });
       await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + leaseId + ' (desde tab Blockchain)');
     } else {
       document.getElementById('bc-complete-msg').innerHTML += '<div style="font-size:11px;color:var(--text3);margin-top:6px">⚠️ No se encontró un leasing en Supabase con este lease_id_onchain — se ejecutó en blockchain pero no se reflejó en el sistema.</div>';
@@ -2863,6 +2914,7 @@ async function iniciarDisputaStandalone() {
     const contratoId = await buscarContratoPorLeaseId(leaseId);
     if (contratoId) {
       await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', contratoId);
+      await registrarEventoEscrow(contratoId, leaseId, 'disputa_iniciada', { tx_hash: tx.hash, detalle: { origen: 'tab_blockchain' } });
       await registrarLog('raise_dispute', 'Inició disputa en lease ' + leaseId + ' (desde tab Blockchain)');
     } else {
       document.getElementById('bc-dispute-msg').innerHTML += '<div style="font-size:11px;color:var(--text3);margin-top:6px">⚠️ No se encontró un leasing en Supabase con este lease_id_onchain.</div>';
@@ -3108,6 +3160,12 @@ async function crearLease() {
         porcentaje_bps: parseInt(c.bps),
         estado: 'pendiente'
       })));
+
+      await registrarEventoEscrow(contrato.id, onchainData.leaseId, 'lease_creado', {
+        tx_hash: onchainData.txHash,
+        monto: contratoData.escrow_monto,
+        token: contratoData.escrow_token
+      });
     }
 
     // Generar cuotas automáticamente — si falla, revertir el contrato
