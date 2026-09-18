@@ -2307,6 +2307,33 @@ async function actualizarEstadoLease() {
   loadDashboard();
 }
 
+// Recalcula escrow_liberado/escrow_bloqueado del contrato a partir de las
+// condiciones ya cumplidas — el contrato on-chain libera los fondos, pero no
+// existe ningún mecanismo que refleje eso en Supabase salvo este recálculo.
+async function sincronizarEscrowLiberado(contratoId) {
+  try {
+    const { data: contrato } = await sbAdmin.from('contratos').select('escrow_monto').eq('id', contratoId).single();
+    if (!contrato || !contrato.escrow_monto) return;
+
+    const { data: condiciones } = await sbAdmin.from('condiciones_escrow')
+      .select('porcentaje_bps, estado').eq('contrato_id', contratoId);
+
+    const bpsLiberados = (condiciones || [])
+      .filter(c => c.estado === 'cumplida')
+      .reduce((sum, c) => sum + (c.porcentaje_bps || 0), 0);
+
+    const liberado = Math.round((contrato.escrow_monto * bpsLiberados / 10000) * 1e6) / 1e6;
+    const bloqueado = Math.round((contrato.escrow_monto - liberado) * 1e6) / 1e6;
+
+    await sbAdmin.from('contratos').update({
+      escrow_liberado: liberado,
+      escrow_bloqueado: bloqueado
+    }).eq('id', contratoId);
+  } catch(e) {
+    console.error('Error sincronizando escrow_liberado:', e);
+  }
+}
+
 async function marcarCondicionInline() {
   const condIdx = document.getElementById('ld-cond-idx').value;
   const favorLessor = document.getElementById('ld-favor-lessor').value === 'true';
@@ -2337,6 +2364,8 @@ async function marcarCondicionInline() {
       tx_hash: tx.hash,
       fecha_cumplimiento: new Date().toISOString().split('T')[0]
     }).eq('contrato_id', currentLeaseId).eq('index_onchain', parseInt(condIdx));
+
+    await sincronizarEscrowLiberado(currentLeaseId);
 
     await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + l.lease_id_onchain);
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
