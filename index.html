@@ -59,6 +59,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 .nav-btn:hover{background:var(--gray);color:var(--black)}
 .nav-btn.active{background:var(--black);color:white}
 .login-tab-btn.active{background:var(--black);color:white;border-color:var(--black)}
+.login-tab-btn{color:var(--black);background:var(--gray)}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .user-pill{display:flex;align-items:center;gap:8px;background:var(--gray);border-radius:30px;padding:5px 14px 5px 5px}
 .user-avatar{width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white}
@@ -190,8 +191,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="login-title">Backend</div>
     <div class="login-subtitle" id="login-subtitle">Ingresá con tu email para acceder al sistema.</div>
     <div style="display:flex;gap:8px;margin-bottom:16px">
-      <button class="login-tab-btn active" id="tab-login-link" style="flex:1;justify-content:center;display:flex;align-items:center;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:13px;font-weight:600" onclick="switchLoginMode('link')">Magic link</button>
-      <button class="login-tab-btn" id="tab-login-pass" style="flex:1;justify-content:center;display:flex;align-items:center;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:13px;font-weight:600" onclick="switchLoginMode('password')">Contraseña</button>
+      <button class="login-tab-btn active" id="tab-login-link" style="flex:1;justify-content:center;display:flex;align-items:center;padding:9px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:600" onclick="switchLoginMode('link')">Magic link</button>
+      <button class="login-tab-btn" id="tab-login-pass" style="flex:1;justify-content:center;display:flex;align-items:center;padding:9px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:600" onclick="switchLoginMode('password')">Contraseña</button>
     </div>
     <div class="field-group">
       <label class="field-label">Email</label>
@@ -3021,6 +3022,17 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+// Red de seguridad: si un botón dispara una acción async que falla silenciosamente
+// (una promesa rechazada sin catch), esto asegura que igual se vea un aviso en pantalla
+// en vez de que "no pase nada" visualmente. También reactiva cualquier botón que haya
+// quedado bloqueado en estado "cargando" por el error.
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Acción falló sin manejo de error:', e.reason);
+  const msg = e.reason?.message || 'Ocurrió un error inesperado';
+  showToast('⚠️ ' + msg);
+  document.querySelectorAll('button[disabled]').forEach(b => b.disabled = false);
+});
+
 // ══════════════════════════════════════════════════════════════════
 // USUARIOS DEL SISTEMA
 // ══════════════════════════════════════════════════════════════════
@@ -3689,8 +3701,8 @@ async function cargarVehiculosEnSeguroModal() {
 // ══════════════════════════════════════════════════════════════════
 async function convertirLeadACliente() {
   const btn = document.getElementById('btn-convertir-lead');
-  const { data: lead } = await sbAdmin.from('leads').select('*').eq('id', currentLeadId).single();
-  if (!lead) return;
+  const { data: lead, error: leadErr } = await sbAdmin.from('leads').select('*').eq('id', currentLeadId).single();
+  if (leadErr || !lead) { showToast('⚠️ No se pudo encontrar el lead. Cerrá y volvé a abrir el detalle.'); return; }
 
   if (lead.estado === 'convertido') {
     showToast('Este lead ya fue convertido a cliente');
