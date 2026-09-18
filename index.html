@@ -252,6 +252,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('logs')">Logs</button>
         <button class="nav-btn" onclick="showView('emails')">Emails</button>
         <button class="nav-btn" onclick="showView('blockchain')">Blockchain</button>
+        <button class="nav-btn" onclick="showView('escrows')">Escrows</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -622,6 +623,53 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
             <div style="font-size:13px;color:var(--text2);line-height:1.6">Iniciá una disputa cuando el cliente incumple y querés que el árbitro libere el saldo bloqueado. Los fondos quedan congelados hasta la resolución (que se hace desde el detalle del leasing en Supabase, una vez identificado).</div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ESCROWS -->
+  <div id="view-escrows" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Escrows</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">Todos los contratos con escrow blockchain habilitado</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="loadEscrows()">↻ Actualizar</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px">Escrows activos</div>
+        <div style="font-size:24px;font-weight:800" id="esc-kpi-total">—</div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px">Depositado (USDC)</div>
+        <div style="font-size:24px;font-weight:800" id="esc-kpi-total-usdc">—</div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px">Liberado promedio</div>
+        <div style="font-size:24px;font-weight:800" id="esc-kpi-pct">—</div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:var(--red);text-transform:uppercase;font-weight:700;margin-bottom:4px">En disputa</div>
+        <div style="font-size:24px;font-weight:800" id="esc-kpi-disputados">—</div>
+      </div>
+    </div>
+
+    <div class="search-bar" style="margin-bottom:16px">
+      <input class="search-input" id="search-escrows" placeholder="Buscar por cliente, vehículo o lease ID..." oninput="filtrarEscrows(this.value)"/>
+    </div>
+
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Cliente</th><th>Vehículo</th><th>Lease ID</th><th>Token</th>
+            <th>Depositado</th><th>Liberado</th><th>Progreso</th>
+            <th>Condiciones</th><th>Estado</th><th>Última actividad</th><th></th>
+          </tr></thead>
+          <tbody id="tbody-escrows"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -1161,7 +1209,11 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
 
       <!-- Wallet info -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">Wallet lessor (⚠️ debe estar activa para ejecutar acciones)</div>
+          <div style="font-size:12px;color:#fbbf24;font-family:var(--mono)" id="ld-wallet-lessor">—</div>
+        </div>
         <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
           <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">Wallet lessee</div>
           <div style="font-size:12px;color:white;font-family:var(--mono)" id="ld-wallet-lessee">—</div>
@@ -2114,11 +2166,11 @@ async function continuarLoadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
@@ -2131,6 +2183,7 @@ function showView(view) {
   if (view === 'logs') loadLogs();
   if (view === 'emails') loadEmailLogs();
   if (view === 'blockchain') initBlockchainTab();
+  if (view === 'escrows') loadEscrows();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2304,6 +2357,7 @@ async function abrirDetalleLease(id) {
     document.getElementById('ld-escrow-pct').textContent = escrowPct + '%';
     setTimeout(() => { document.getElementById('ld-escrow-progress').style.width = escrowPct + '%'; }, 100);
 
+    document.getElementById('ld-wallet-lessor').textContent = l.wallet_lessor ? l.wallet_lessor.slice(0,8)+'...'+l.wallet_lessor.slice(-6) : 'No registrada — mirá la TX de creación en Basescan';
     document.getElementById('ld-wallet-lessee').textContent = l.wallet_lessee ? l.wallet_lessee.slice(0,8)+'...'+l.wallet_lessee.slice(-6) : '—';
     document.getElementById('ld-onchain-address').value = l.contrato_address_onchain || '';
     document.getElementById('ld-onchain-lease-id').value = l.lease_id_onchain || '';
@@ -2820,6 +2874,7 @@ async function consultarLeaseOnchain() {
     html += '<div><strong>Depósito:</strong> ' + ethers.formatUnits(lease.depositAmount, decimals) + '</div>';
     html += '<div><strong>Liberado:</strong> ' + ethers.formatUnits(lease.releasedAmount, decimals) + '</div>';
     html += '<div><strong>Bloqueado:</strong> ' + ethers.formatUnits(lease.lockedAmount, decimals) + '</div>';
+    html += '<div><strong>Lessor:</strong> ' + lease.lessor.slice(0,8) + '...' + lease.lessor.slice(-6) + '</div>';
     html += '<div><strong>Lessee:</strong> ' + lease.lessee.slice(0,8) + '...' + lease.lessee.slice(-6) + '</div>';
     html += '<div><strong>Árbitro:</strong> ' + lease.arbitrator.slice(0,8) + '...' + lease.arbitrator.slice(-6) + '</div>';
     html += '<div style="grid-column:1/-1"><strong>VIN:</strong> ' + lease.carVIN + ' — ' + lease.carDescription + '</div>';
@@ -2935,6 +2990,80 @@ function abrirNuevoLease() {
   actualizarNlBpsTotal();
   openModal('modal-nuevo-lease');
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ESCROWS — tabla resumen de todos los escrows habilitados
+// ══════════════════════════════════════════════════════════════════
+let allEscrows = [];
+
+function badgeEstadoContrato(estado) {
+  const map = { activo: 'badge-green', disputado: 'badge-red', completado: 'badge-blue', borrador: 'badge-gray', pendiente: 'badge-yellow' };
+  return '<div class="badge ' + (map[estado] || 'badge-gray') + '">' + (estado || '—') + '</div>';
+}
+
+async function loadEscrows() {
+  const { data, error } = await sbAdmin.from('vista_escrows_resumen').select('*');
+  const tbody = document.getElementById('tbody-escrows');
+
+  if (error) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error al cargar: ' + error.message + '</div></div></td></tr>';
+    return;
+  }
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔒</div><div class="empty-text">Sin escrows registrados todavía.</div></div></td></tr>';
+    document.getElementById('esc-kpi-total').textContent = '0';
+    document.getElementById('esc-kpi-total-usdc').textContent = '0';
+    document.getElementById('esc-kpi-pct').textContent = '—';
+    document.getElementById('esc-kpi-disputados').textContent = '0';
+    return;
+  }
+
+  allEscrows = data;
+  renderEscrows(data);
+
+  document.getElementById('esc-kpi-total').textContent = data.length;
+  const totalUsdc = data.filter(e => e.escrow_token === 'USDC').reduce((s, e) => s + (parseFloat(e.escrow_monto) || 0), 0);
+  document.getElementById('esc-kpi-total-usdc').textContent = totalUsdc.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  const pctProm = data.reduce((s, e) => s + (parseFloat(e.porcentaje_liberado) || 0), 0) / data.length;
+  document.getElementById('esc-kpi-pct').textContent = pctProm.toFixed(0) + '%';
+  document.getElementById('esc-kpi-disputados').textContent = data.filter(e => e.estado_contrato === 'disputado').length;
+}
+
+function renderEscrows(data) {
+  const tbody = document.getElementById('tbody-escrows');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados.</div></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(e => {
+    const pct = parseFloat(e.porcentaje_liberado) || 0;
+    const ultimaAct = e.ultima_actividad ? new Date(e.ultima_actividad).toLocaleDateString('es-AR') : '—';
+    return '<tr onclick="abrirDetalleLease(\'' + e.contrato_id + '\')" style="cursor:pointer">' +
+      '<td class="bold">' + (e.cliente_nombre || '—') + '</td>' +
+      '<td style="font-size:12px">' + (e.vehiculo || '—') + '</td>' +
+      '<td class="mono">' + (e.lease_id_onchain ?? '—') + '</td>' +
+      '<td>' + (e.escrow_token || '—') + '</td>' +
+      '<td class="mono">' + (parseFloat(e.escrow_monto) || 0).toLocaleString('es-AR') + '</td>' +
+      '<td class="mono" style="color:var(--green)">' + (parseFloat(e.escrow_liberado) || 0).toLocaleString('es-AR') + '</td>' +
+      '<td style="min-width:100px"><div style="background:var(--gray2);border-radius:20px;height:6px;overflow:hidden"><div style="background:var(--green);height:100%;width:' + pct + '%"></div></div><div style="font-size:10px;color:var(--text3);margin-top:2px">' + pct + '%</div></td>' +
+      '<td class="mono" style="font-size:12px">' + (e.condiciones_cumplidas ?? 0) + '/' + (e.condiciones_totales ?? 0) + '</td>' +
+      '<td>' + badgeEstadoContrato(e.estado_contrato) + '</td>' +
+      '<td style="font-size:11px;color:var(--text3)">' + ultimaAct + '</td>' +
+      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLease(\'' + e.contrato_id + '\')">Ver →</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function filtrarEscrows(q) {
+  const term = q.toLowerCase();
+  const filtered = allEscrows.filter(e =>
+    (e.cliente_nombre || '').toLowerCase().includes(term) ||
+    (e.vehiculo || '').toLowerCase().includes(term) ||
+    String(e.lease_id_onchain ?? '').includes(term)
+  );
+  renderEscrows(filtered);
+}
+
 
 // ── Constructor de condiciones de liberación (escrow) ──────────────
 let nlCondiciones = [];
@@ -3069,6 +3198,7 @@ async function crearLease() {
         await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
       }
       const signer = await provider.getSigner();
+      const walletLessor = await signer.getAddress();
       const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
 
       document.getElementById('nl-msg').innerHTML = '<div class="alert alert-warning">Confirmá la creación del lease en MetaMask...</div>';
@@ -3101,7 +3231,7 @@ async function crearLease() {
         leaseIdOnchain = Number(await contract.leaseCounter());
       }
 
-      onchainData = { address: ESCROW_CONTRACT_ADDRESS, leaseId: leaseIdOnchain, txHash: tx.hash };
+      onchainData = { address: ESCROW_CONTRACT_ADDRESS, leaseId: leaseIdOnchain, txHash: tx.hash, lessor: walletLessor };
       showToast('✓ Lease creado en Base — TX ' + tx.hash.slice(0,10) + '...');
     }
 
@@ -3139,6 +3269,7 @@ async function crearLease() {
     if (tipo === 'escrow_blockchain') {
       contratoData.wallet_lessee = document.getElementById('nl-wallet-lessee').value;
       contratoData.wallet_arbitro = document.getElementById('nl-wallet-arbitro').value;
+      contratoData.wallet_lessor = onchainData.lessor;
       contratoData.escrow_token = document.getElementById('nl-escrow-token').value;
       contratoData.escrow_monto = parseFloat(document.getElementById('nl-escrow-monto').value) || 0;
       contratoData.escrow_bloqueado = contratoData.escrow_monto;
