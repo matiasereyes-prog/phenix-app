@@ -251,6 +251,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('usuarios')">Usuarios</button>
         <button class="nav-btn" onclick="showView('logs')">Logs</button>
         <button class="nav-btn" onclick="showView('emails')">Emails</button>
+        <button class="nav-btn" onclick="showView('blockchain')">Blockchain</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -534,6 +535,93 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <thead><tr><th>Destinatario</th><th>Estado</th><th>Enviado</th><th>Actualizado</th></tr></thead>
           <tbody id="tbody-emails"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCKCHAIN -->
+  <div id="view-blockchain" style="display:none">
+    <div style="margin-bottom:20px">
+      <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Blockchain</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:2px">Gestión directa del smart contract en Base — <span class="mono" style="font-size:11px">0x8415...eD2c5f</span></div>
+    </div>
+
+    <div id="bc-no-wallet" class="card" style="margin-bottom:20px;padding:0">
+      <div style="text-align:center;padding:48px">
+        <div style="font-size:40px;margin-bottom:12px">⚡</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px">Conectá tu wallet para operar</div>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:20px">Necesitás MetaMask conectado a Base Mainnet para consultar o ejecutar transacciones.</div>
+        <button class="btn btn-black" onclick="conectarWalletBlockchain()">Conectar wallet</button>
+      </div>
+    </div>
+
+    <div id="bc-content" style="display:none">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <div style="background:var(--green-bg);color:var(--green);font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;display:flex;align-items:center;gap:6px">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>
+          <span id="bc-wallet-addr">—</span> · Base Mainnet
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <!-- Consultar lease -->
+        <div class="card" style="padding:20px">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">🔍 Consultar lease on-chain</div>
+          <div class="form-group">
+            <label class="form-label">Lease ID</label>
+            <input class="form-input" type="number" id="bc-query-id" placeholder="1"/>
+          </div>
+          <button class="btn btn-black" style="width:100%;justify-content:center" onclick="consultarLeaseOnchain()">Consultar</button>
+          <div id="bc-query-result" style="margin-top:16px"></div>
+        </div>
+
+        <!-- Marcar condición standalone -->
+        <div class="card" style="padding:20px">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">✅ Marcar condición cumplida</div>
+          <div class="alert alert-warning" style="margin-bottom:12px">Solo el lessor (esta wallet) puede ejecutar esta acción.</div>
+          <div class="form-group">
+            <label class="form-label">Lease ID</label>
+            <input class="form-input" type="number" id="bc-complete-id" placeholder="1"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">N° de condición (0 = primera)</label>
+            <input class="form-input" type="number" id="bc-complete-idx" placeholder="0" min="0"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">¿A quién van los fondos?</label>
+            <select class="form-select" id="bc-complete-favor">
+              <option value="false">✅ Al lessee (cumplió)</option>
+              <option value="true">❌ Al lessor (incumplió)</option>
+            </select>
+          </div>
+          <button class="btn btn-green" style="width:100%;justify-content:center;padding:12px" id="bc-btn-complete" onclick="completarCondicionStandalone()">
+            <span id="bc-complete-text">✓ Ejecutar en blockchain</span>
+            <div class="spinner" id="bc-complete-spinner" style="display:none"></div>
+          </button>
+          <div id="bc-complete-msg" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Disputas standalone -->
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:14px">⚠️ Gestión de disputas</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div class="form-group">
+              <label class="form-label">Lease ID</label>
+              <input class="form-input" type="number" id="bc-dispute-id" placeholder="1"/>
+            </div>
+            <button class="btn btn-sm" style="width:100%;justify-content:center;padding:12px;background:#ef4444;color:white" id="bc-btn-dispute" onclick="iniciarDisputaStandalone()">
+              <span id="bc-dispute-text">Iniciar disputa</span>
+              <div class="spinner" id="bc-dispute-spinner" style="display:none;border-top-color:white"></div>
+            </button>
+            <div id="bc-dispute-msg" style="margin-top:12px"></div>
+          </div>
+          <div style="background:var(--gray);border-radius:10px;padding:16px">
+            <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">¿Cuándo usar esto?</div>
+            <div style="font-size:13px;color:var(--text2);line-height:1.6">Iniciá una disputa cuando el cliente incumple y querés que el árbitro libere el saldo bloqueado. Los fondos quedan congelados hasta la resolución (que se hace desde el detalle del leasing en Supabase, una vez identificado).</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2022,11 +2110,11 @@ async function continuarLoadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
@@ -2038,6 +2126,7 @@ function showView(view) {
   if (view === 'usuarios') loadUsuarios();
   if (view === 'logs') loadLogs();
   if (view === 'emails') loadEmailLogs();
+  if (view === 'blockchain') initBlockchainTab();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2626,6 +2715,165 @@ async function editarEstadoLease() {
 function toggleEscrowFields() {
   const tipo = document.getElementById('nl-tipo').value;
   document.getElementById('escrow-fields').style.display = tipo === 'escrow_blockchain' ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BLOCKCHAIN — TAB DEDICADO (consulta y operaciones directas por Lease ID)
+// ══════════════════════════════════════════════════════════════════
+let bcWalletConnected = false;
+
+function initBlockchainTab() {
+  document.getElementById('bc-no-wallet').style.display = bcWalletConnected ? 'none' : 'block';
+  document.getElementById('bc-content').style.display = bcWalletConnected ? 'block' : 'none';
+}
+
+async function conectarWalletBlockchain() {
+  if (!window.ethereum) { showToast('Instalá MetaMask para operar'); return; }
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 8453) {
+      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] }); }
+      catch(e) { if (e.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x2105', chainName: 'Base', nativeCurrency: { name:'Ether', symbol:'ETH', decimals:18 }, rpcUrls: ['https://mainnet.base.org'], blockExplorerUrls: ['https://basescan.org'] }] }); }
+    }
+    const signer = await provider.getSigner();
+    const address = await signer.getAddress();
+    bcWalletConnected = true;
+    document.getElementById('bc-wallet-addr').textContent = address.slice(0,6) + '…' + address.slice(-4);
+    initBlockchainTab();
+    showToast('✓ Wallet conectada · Base Mainnet');
+  } catch(e) {
+    showToast('Error al conectar: ' + (e.message || ''));
+  }
+}
+
+function estadoLeaseTexto(status) {
+  return ['Pendiente', 'Activo', 'Completado', 'Disputado', 'Cancelado'][status] ?? 'Desconocido';
+}
+
+async function consultarLeaseOnchain() {
+  const leaseId = document.getElementById('bc-query-id').value;
+  const resEl = document.getElementById('bc-query-result');
+  if (!leaseId) { showToast('Ingresá un Lease ID'); return; }
+  resEl.innerHTML = '<div class="alert alert-warning">Consultando el contrato...</div>';
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, provider);
+    const lease = await contract.getLease(parseInt(leaseId));
+    const conds = await contract.getConditions(parseInt(leaseId));
+
+    const decimals = lease.token === '0x0000000000000000000000000000000000000000' ? 18 :
+      (Object.values(TOKENS_CONFIG).find(t => t.address.toLowerCase() === lease.token.toLowerCase())?.decimals ?? 18);
+
+    let html = '<div style="background:var(--gray);border-radius:10px;padding:14px;margin-bottom:10px">';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">';
+    html += '<div><strong>Estado:</strong> ' + estadoLeaseTexto(Number(lease.status)) + '</div>';
+    html += '<div><strong>Depósito:</strong> ' + ethers.formatUnits(lease.depositAmount, decimals) + '</div>';
+    html += '<div><strong>Liberado:</strong> ' + ethers.formatUnits(lease.releasedAmount, decimals) + '</div>';
+    html += '<div><strong>Bloqueado:</strong> ' + ethers.formatUnits(lease.lockedAmount, decimals) + '</div>';
+    html += '<div><strong>Lessee:</strong> ' + lease.lessee.slice(0,8) + '...' + lease.lessee.slice(-6) + '</div>';
+    html += '<div><strong>Árbitro:</strong> ' + lease.arbitrator.slice(0,8) + '...' + lease.arbitrator.slice(-6) + '</div>';
+    html += '<div style="grid-column:1/-1"><strong>VIN:</strong> ' + lease.carVIN + ' — ' + lease.carDescription + '</div>';
+    html += '</div></div>';
+
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Condiciones (' + conds.length + ')</div>';
+    conds.forEach((c, i) => {
+      html += '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-radius:6px;background:' + (c.completed ? 'var(--green-bg)' : 'var(--gray)') + ';margin-bottom:4px;font-size:12px">';
+      html += '<span>' + (c.completed ? '✅' : '⏳') + ' #' + i + ' ' + c.description + ' (' + (Number(c.basisPoints)/100) + '%)</span>';
+      html += '</div>';
+    });
+
+    resEl.innerHTML = html;
+  } catch(e) {
+    resEl.innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Lease no encontrado') + '</div>';
+  }
+}
+
+// Busca en Supabase el contrato correspondiente a un lease_id_onchain, para
+// mantener sincronizados condiciones_escrow / escrow_liberado también cuando
+// la acción se ejecuta desde este tab (y no desde el detalle del leasing).
+async function buscarContratoPorLeaseId(leaseId) {
+  const { data } = await sbAdmin.from('contratos').select('id').eq('lease_id_onchain', parseInt(leaseId)).eq('contrato_address_onchain', ESCROW_CONTRACT_ADDRESS).maybeSingle();
+  return data?.id || null;
+}
+
+async function completarCondicionStandalone() {
+  const leaseId = document.getElementById('bc-complete-id').value;
+  const condIdx = document.getElementById('bc-complete-idx').value;
+  const favorLessor = document.getElementById('bc-complete-favor').value === 'true';
+  if (!leaseId || condIdx === '') { showToast('Completá Lease ID y N° de condición'); return; }
+
+  document.getElementById('bc-btn-complete').disabled = true;
+  document.getElementById('bc-complete-text').style.display = 'none';
+  document.getElementById('bc-complete-spinner').style.display = 'inline-block';
+  document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Confirmá en MetaMask...</div>';
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
+    const tx = await contract.completeCondition(parseInt(leaseId), parseInt(condIdx), favorLessor);
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+    await tx.wait();
+
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
+    showToast('✓ Condición marcada en blockchain');
+
+    const contratoId = await buscarContratoPorLeaseId(leaseId);
+    if (contratoId) {
+      await sbAdmin.from('condiciones_escrow').update({
+        estado: 'cumplida', favor_lessor: favorLessor, tx_hash: tx.hash,
+        fecha_cumplimiento: new Date().toISOString().split('T')[0]
+      }).eq('contrato_id', contratoId).eq('index_onchain', parseInt(condIdx));
+      await sincronizarEscrowLiberado(contratoId);
+      await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + leaseId + ' (desde tab Blockchain)');
+    } else {
+      document.getElementById('bc-complete-msg').innerHTML += '<div style="font-size:11px;color:var(--text3);margin-top:6px">⚠️ No se encontró un leasing en Supabase con este lease_id_onchain — se ejecutó en blockchain pero no se reflejó en el sistema.</div>';
+    }
+  } catch(e) {
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Error') + '</div>';
+  } finally {
+    document.getElementById('bc-btn-complete').disabled = false;
+    document.getElementById('bc-complete-text').style.display = 'inline';
+    document.getElementById('bc-complete-spinner').style.display = 'none';
+  }
+}
+
+async function iniciarDisputaStandalone() {
+  const leaseId = document.getElementById('bc-dispute-id').value;
+  if (!leaseId) { showToast('Ingresá un Lease ID'); return; }
+  if (!confirm('¿Iniciar disputa en el lease ' + leaseId + '? Los fondos quedan bloqueados hasta que el árbitro resuelva.')) return;
+
+  document.getElementById('bc-btn-dispute').disabled = true;
+  document.getElementById('bc-dispute-text').style.display = 'none';
+  document.getElementById('bc-dispute-spinner').style.display = 'inline-block';
+  document.getElementById('bc-dispute-msg').innerHTML = '<div class="alert alert-warning">Confirmá en MetaMask...</div>';
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
+    const tx = await contract.raiseDispute(parseInt(leaseId));
+    await tx.wait();
+
+    document.getElementById('bc-dispute-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:#92400e">Ver TX ↗</a></div>';
+    showToast('⚠️ Disputa iniciada en blockchain');
+
+    const contratoId = await buscarContratoPorLeaseId(leaseId);
+    if (contratoId) {
+      await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', contratoId);
+      await registrarLog('raise_dispute', 'Inició disputa en lease ' + leaseId + ' (desde tab Blockchain)');
+    } else {
+      document.getElementById('bc-dispute-msg').innerHTML += '<div style="font-size:11px;color:var(--text3);margin-top:6px">⚠️ No se encontró un leasing en Supabase con este lease_id_onchain.</div>';
+    }
+  } catch(e) {
+    document.getElementById('bc-dispute-msg').innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Error') + '</div>';
+  } finally {
+    document.getElementById('bc-btn-dispute').disabled = false;
+    document.getElementById('bc-dispute-text').style.display = 'inline';
+    document.getElementById('bc-dispute-spinner').style.display = 'none';
+  }
 }
 
 function abrirNuevoLease() {
