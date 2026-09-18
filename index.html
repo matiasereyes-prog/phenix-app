@@ -2914,7 +2914,14 @@ async function completarCondicionStandalone() {
 
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 8453) {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
+    }
     const signer = await provider.getSigner();
+    const signerAddr = await signer.getAddress();
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Firmando con ' + signerAddr.slice(0,8) + '...' + signerAddr.slice(-6) + '</div>';
     const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
     const tx = await contract.completeCondition(parseInt(leaseId), parseInt(condIdx), favorLessor);
     document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
@@ -2958,6 +2965,7 @@ async function iniciarDisputaStandalone() {
 
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
     const tx = await contract.raiseDispute(parseInt(leaseId));
