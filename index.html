@@ -253,6 +253,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('emails')">Emails</button>
         <button class="nav-btn" onclick="showView('blockchain')">Blockchain</button>
         <button class="nav-btn" onclick="showView('escrows')">Escrows</button>
+        <button class="nav-btn" onclick="showView('cotizador')">Cotizador</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -673,6 +674,80 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
     </div>
   </div>
+  <div id="view-cotizador" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Cotizador</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">Cuota estimada por valor del auto, % de garantía y riesgo crediticio (Nosis)</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:24px;max-width:640px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Valor del vehículo (USD)</label>
+          <input class="form-input" type="number" id="cz-valor" min="0" placeholder="25000" oninput="calcularCuotaCotizador()"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Garantía</label>
+          <select class="form-input" id="cz-garantia" onchange="calcularCuotaCotizador()">
+            <option value="10">10%</option>
+            <option value="25">25%</option>
+            <option value="50">50%</option>
+            <option value="100">100%</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Plazo (meses)</label>
+        <input class="form-input" type="number" id="cz-plazo" min="1" step="1" placeholder="36" oninput="calcularCuotaCotizador()"/>
+      </div>
+
+      <div style="border-top:1px solid #eee;margin:20px 0;padding-top:16px">
+        <label class="form-label">Riesgo crediticio (Nosis)</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input class="form-input" type="text" id="cz-cuit" placeholder="CUIT del cliente" style="flex:1"/>
+          <button class="btn btn-outline btn-sm" onclick="consultarNosis()" style="white-space:nowrap">Consultar Nosis</button>
+        </div>
+        <div id="cz-nosis-result" style="font-size:13px;margin-top:10px;color:var(--text2)"></div>
+      </div>
+
+      <div id="cz-resultado" style="display:none;margin-top:20px;padding:20px;border-radius:var(--radius-sm);background:var(--bg)">
+        <div style="font-size:12px;color:var(--text3)">Cuota mensual estimada</div>
+        <div id="cz-cuota" style="font-family:var(--display);font-size:32px;font-weight:700;color:var(--accent)">—</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;font-size:13px;color:var(--text2)">
+          <div>Monto a financiar: <b id="cz-capital">—</b></div>
+          <div>Tasa anual aplicada: <b id="cz-tasa">—</b></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:10px">Estimación no vinculante. Sujeta a aprobación crediticia final.</div>
+      </div>
+    </div>
+
+    <div id="cotizador-admin-matrix" class="card" style="padding:24px;max-width:900px;margin-top:20px;display:none">
+      <div style="font-family:var(--display);font-size:16px;font-weight:700;margin-bottom:4px">Matriz de tasas anuales (%)</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Por % de garantía y categoría de riesgo Nosis. Editable solo por admin/ejecutivo.</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px" id="tabla-tasas-riesgo">
+          <thead>
+            <tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase">
+              <th style="padding:6px 8px">Garantía</th>
+              <th style="padding:6px 8px">Muy bajo (&gt;900)</th>
+              <th style="padding:6px 8px">Bajo (750-899)</th>
+              <th style="padding:6px 8px">Medio (600-749)</th>
+              <th style="padding:6px 8px">Alto (500-599)</th>
+              <th style="padding:6px 8px">Muy alto (400-499)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-tasas-riesgo"></tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px">Categoría "No califica" (&lt;400) no cotiza — no tiene tasa asignable.</div>
+      <button class="btn btn-primary" style="margin-top:16px" onclick="guardarConfigCotizador()">Guardar matriz</button>
+      <div id="cfg-tasa-msg" style="font-size:13px;margin-top:10px;display:none"></div>
+    </div>
+  </div>
+
 
   </div>
 </div>
@@ -1502,6 +1577,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="lessee">Cliente (lessee)</option>
           <option value="ejecutivo">Ejecutivo de ventas</option>
           <option value="admin">Administrador</option>
+          <option value="concesionario">Concesionario</option>
         </select>
       </div>
       <div class="form-group">
@@ -1907,6 +1983,7 @@ async function edgeQuery(action, table, options = {}) {
 }
 
 let currentUser = null;
+let currentUserRol = null;
 let walletConnected = false;
 const LEASE_ABI = [
   { inputs: [{ name: "p", type: "tuple", components: [{ name: "lessee", type: "address" }, { name: "arbitrator", type: "address" }, { name: "token", type: "address" }, { name: "depositAmount", type: "uint256" }, { name: "leaseDurationDays", type: "uint256" }, { name: "carVIN", type: "string" }, { name: "carDescription", type: "string" }] }, { name: "condDescriptions", type: "string[]" }, { name: "condBasisPoints", type: "uint256[]" }], name: "createLease", outputs: [{ name: "leaseId", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
@@ -2130,12 +2207,13 @@ async function loadApp() {
 async function continuarLoadApp() {
   // Verificar rol — solo admin y ejecutivo pueden acceder al backend
   const { data: usuario } = await sbAdmin.from('usuarios').select('rol, nombre').eq('email', currentUser.email).single();
-  
-  if (!usuario || !['admin', 'ejecutivo'].includes(usuario.rol)) {
+
+  if (!usuario || !['admin', 'ejecutivo', 'concesionario'].includes(usuario.rol)) {
     await sb.auth.signOut();
     document.getElementById('login-msg').innerHTML = '<div class="login-error">⛔ No tenés permisos para acceder al backend. Contactá al administrador.</div>';
     return;
   }
+  currentUserRol = usuario.rol;
 
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
@@ -2152,13 +2230,24 @@ async function continuarLoadApp() {
     });
   }
 
+  // Concesionario: solo ve la pestaña Cotizador
+  if (usuario.rol === 'concesionario') {
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      if (b.textContent !== 'Cotizador') b.style.display = 'none';
+    });
+  }
+
   // Solo registrar login si no hay sesión reciente (evitar ruido)
   const lastLogin = sessionStorage.getItem('last_login_logged');
   if (!lastLogin || Date.now() - parseInt(lastLogin) > 300000) {
     await registrarLog('login', 'Acceso al backend desde ' + email);
     sessionStorage.setItem('last_login_logged', Date.now().toString());
   }
-  await Promise.all([loadDashboard(), loadVehiculos()]);
+  if (usuario.rol === 'concesionario') {
+    showView('cotizador');
+  } else {
+    await Promise.all([loadDashboard(), loadVehiculos()]);
+  }
   window.history.replaceState(null, '', window.location.pathname);
 }
 
@@ -2166,11 +2255,11 @@ async function continuarLoadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
@@ -2184,6 +2273,7 @@ function showView(view) {
   if (view === 'emails') loadEmailLogs();
   if (view === 'blockchain') initBlockchainTab();
   if (view === 'escrows') loadEscrows();
+  if (view === 'cotizador') loadConfigCotizador();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3007,6 +3097,152 @@ let allEscrows = [];
 function badgeEstadoContrato(estado) {
   const map = { activo: 'badge-green', disputado: 'badge-red', completado: 'badge-blue', borrador: 'badge-gray', pendiente: 'badge-yellow' };
   return '<div class="badge ' + (map[estado] || 'badge-gray') + '">' + (estado || '—') + '</div>';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONFIGURACION DEL COTIZADOR
+// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// COTIZADOR — matriz de tasas por garantía × riesgo Nosis
+// ══════════════════════════════════════════════════════════════════
+const CZ_RIESGOS = [
+  { key: 'muy_bajo',    label: 'Muy bajo',  min: 900, max: Infinity },
+  { key: 'bajo',        label: 'Bajo',      min: 750, max: 899 },
+  { key: 'medio',       label: 'Medio',     min: 600, max: 749 },
+  { key: 'alto',        label: 'Alto',      min: 500, max: 599 },
+  { key: 'muy_alto',    label: 'Muy alto',  min: 400, max: 499 },
+  { key: 'no_califica', label: 'No califica', min: -Infinity, max: 399 }
+];
+const CZ_GARANTIAS = [10, 25, 50, 100];
+let czMatriz = {}; // { "10_muy_bajo": tasa_anual, ... }
+let czUltimoRiesgo = null; // { categoria, score } de la última consulta Nosis
+
+function czKey(garantia, riesgo) { return garantia + '_' + riesgo; }
+
+async function loadConfigCotizador() {
+  const { data, error } = await sbAdmin.from('tasas_riesgo').select('*');
+  czMatriz = {};
+  if (!error && data) {
+    data.forEach(row => { czMatriz[czKey(row.garantia_pct, row.riesgo_categoria)] = row.tasa_anual; });
+  }
+
+  // La grilla editable solo la ven admin/ejecutivo
+  const panel = document.getElementById('cotizador-admin-matrix');
+  if (panel) panel.style.display = (currentUserRol === 'admin' || currentUserRol === 'ejecutivo') ? 'block' : 'none';
+
+  const tbody = document.getElementById('tbody-tasas-riesgo');
+  if (tbody) {
+    tbody.innerHTML = CZ_GARANTIAS.map(g => `
+      <tr>
+        <td style="padding:6px 8px;font-weight:600">${g}%</td>
+        ${CZ_RIESGOS.filter(r => r.key !== 'no_califica').map(r => `
+          <td style="padding:6px 8px">
+            <input class="form-input" type="number" step="0.5" min="0" style="width:80px"
+              id="cz-cell-${g}-${r.key}" value="${czMatriz[czKey(g, r.key)] ?? ''}"/>
+          </td>
+        `).join('')}
+      </tr>
+    `).join('');
+  }
+  calcularCuotaCotizador();
+}
+
+async function guardarConfigCotizador() {
+  const msg = document.getElementById('cfg-tasa-msg');
+  const rows = [];
+  for (const g of CZ_GARANTIAS) {
+    for (const r of CZ_RIESGOS) {
+      if (r.key === 'no_califica') continue;
+      const el = document.getElementById(`cz-cell-${g}-${r.key}`);
+      const val = parseFloat(el.value);
+      if (isNaN(val)) {
+        msg.style.display = 'block'; msg.style.color = 'var(--red)';
+        msg.textContent = `Completá la tasa para garantía ${g}% / riesgo ${r.label}.`;
+        return;
+      }
+      rows.push({ garantia_pct: g, riesgo_categoria: r.key, tasa_anual: val, updated_at: new Date().toISOString() });
+    }
+  }
+  const { error } = await sbAdmin.from('tasas_riesgo').upsert(rows, { onConflict: 'garantia_pct,riesgo_categoria' });
+  msg.style.display = 'block';
+  if (error) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error al guardar: ' + error.message;
+  } else {
+    msg.style.color = 'var(--green)';
+    msg.textContent = '✓ Matriz guardada.';
+    loadConfigCotizador();
+  }
+}
+
+function czCategoriaPorScore(score) {
+  return CZ_RIESGOS.find(r => score >= r.min && score <= r.max) || CZ_RIESGOS[CZ_RIESGOS.length - 1];
+}
+
+// TODO: reemplazar por la consulta real a Nosis (vía Supabase Edge Function,
+// para no exponer credenciales de Nosis en el frontend). Por ahora, mock.
+async function consultarNosis() {
+  const cuit = document.getElementById('cz-cuit').value.trim();
+  const result = document.getElementById('cz-nosis-result');
+  if (!cuit) { result.textContent = 'Ingresá un CUIT.'; result.style.color = 'var(--red)'; return; }
+
+  result.style.color = 'var(--text2)';
+  result.textContent = 'Consultando Nosis…';
+
+  try {
+    // MOCK — reemplazar por llamada real, ej:
+    // const { data, error } = await sb.functions.invoke('consultar-nosis', { body: { cuit } });
+    await new Promise(res => setTimeout(res, 600));
+    const scoreSimulado = Math.floor(400 + Math.random() * 600);
+    const cat = czCategoriaPorScore(scoreSimulado);
+    czUltimoRiesgo = { categoria: cat.key, score: scoreSimulado };
+    result.style.color = cat.key === 'no_califica' ? 'var(--red)' : 'var(--text2)';
+    result.textContent = `Score: ${scoreSimulado} — Categoría: ${cat.label} (dato simulado, integración Nosis pendiente)`;
+  } catch (e) {
+    result.style.color = 'var(--red)';
+    result.textContent = 'Error al consultar Nosis: ' + e.message;
+    czUltimoRiesgo = null;
+  }
+  calcularCuotaCotizador();
+}
+
+function calcularCuotaCotizador() {
+  const valorAuto = parseFloat(document.getElementById('cz-valor')?.value);
+  const garantiaPct = parseInt(document.getElementById('cz-garantia')?.value);
+  const plazoMeses = parseInt(document.getElementById('cz-plazo')?.value);
+  const resultado = document.getElementById('cz-resultado');
+  if (!resultado) return;
+
+  if (!valorAuto || !garantiaPct || !plazoMeses || !czUltimoRiesgo) {
+    resultado.style.display = 'none';
+    return;
+  }
+  if (czUltimoRiesgo.categoria === 'no_califica') {
+    resultado.style.display = 'block';
+    document.getElementById('cz-cuota').textContent = 'No califica';
+    document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-tasa').textContent = '—';
+    return;
+  }
+
+  const tasaAnual = czMatriz[czKey(garantiaPct, czUltimoRiesgo.categoria)];
+  if (tasaAnual === undefined) {
+    resultado.style.display = 'block';
+    document.getElementById('cz-cuota').textContent = 'Tasa no configurada';
+    document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-tasa').textContent = '—';
+    return;
+  }
+
+  const capitalFinanciado = valorAuto * (1 - garantiaPct / 100);
+  const i = tasaAnual / 100 / 12;
+  const n = plazoMeses;
+  const cuota = i === 0 ? capitalFinanciado / n : capitalFinanciado * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
+
+  resultado.style.display = 'block';
+  document.getElementById('cz-cuota').textContent = 'USD ' + cuota.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  document.getElementById('cz-capital').textContent = 'USD ' + capitalFinanciado.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  document.getElementById('cz-tasa').textContent = tasaAnual + '%';
 }
 
 async function loadEscrows() {
