@@ -545,14 +545,20 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   <div id="view-blockchain" style="display:none">
     <div style="margin-bottom:20px">
       <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Blockchain</div>
-      <div style="font-size:13px;color:var(--text2);margin-top:2px">Gestión directa del smart contract en Base — <span class="mono" style="font-size:11px">0x8415...eD2c5f</span></div>
+      <div style="font-size:13px;color:var(--text2);margin-top:2px">Gestión directa del smart contract on-chain — elegí la red antes de conectar.</div>
     </div>
 
     <div id="bc-no-wallet" class="card" style="margin-bottom:20px;padding:0">
       <div style="text-align:center;padding:48px">
         <div style="font-size:40px;margin-bottom:12px">⚡</div>
         <div style="font-size:18px;font-weight:800;margin-bottom:8px">Conectá tu wallet para operar</div>
-        <div style="font-size:14px;color:var(--text2);margin-bottom:20px">Necesitás MetaMask conectado a Base Mainnet para consultar o ejecutar transacciones.</div>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:20px">Elegí la red y conectá MetaMask para consultar o ejecutar transacciones.</div>
+        <div class="form-group" style="max-width:280px;margin:0 auto 16px">
+          <select class="form-select" id="bc-network">
+            <option value="base">Base</option>
+            <option value="bsc">BNB Smart Chain (BSC)</option>
+          </select>
+        </div>
         <button class="btn btn-black" onclick="conectarWalletBlockchain()">Conectar wallet</button>
       </div>
     </div>
@@ -561,7 +567,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
         <div style="background:var(--green-bg);color:var(--green);font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;display:flex;align-items:center;gap:6px">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>
-          <span id="bc-wallet-addr">—</span> · Base Mainnet
+          <span id="bc-wallet-addr">—</span> · <span id="bc-wallet-network">Base Mainnet</span>
         </div>
       </div>
 
@@ -945,6 +951,16 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div class="form-section">Escrow blockchain</div>
       <div class="form-row">
         <div class="form-group">
+          <label class="form-label">Red</label>
+          <select class="form-select" id="nl-escrow-red" onchange="actualizarTokensEscrowNL()">
+            <option value="base">Base</option>
+            <option value="bsc">BNB Smart Chain (BSC)</option>
+          </select>
+        </div>
+        <div class="form-group"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label class="form-label">Wallet del lessee</label>
           <input class="form-input" id="nl-wallet-lessee" placeholder="0x..."/>
         </div>
@@ -956,11 +972,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Token del escrow</label>
-          <select class="form-select" id="nl-escrow-token">
-            <option value="USDC">USDC</option>
-            <option value="ETH">ETH</option>
-            <option value="cbBTC">cbBTC</option>
-          </select>
+          <select class="form-select" id="nl-escrow-token"></select>
         </div>
         <div class="form-group">
           <label class="form-label">Monto del escrow</label>
@@ -1994,12 +2006,52 @@ const LEASE_ABI = [
   { inputs: [{ name: "leaseId", type: "uint256" }], name: "getConditions", outputs: [{ components: [{ name: "description", type: "string" }, { name: "basisPoints", type: "uint256" }, { name: "completed", type: "bool" }, { name: "releasedAmount", type: "uint256" }], type: "tuple[]" }], stateMutability: "view", type: "function" },
   { inputs: [], name: "leaseCounter", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
 ];
-const ESCROW_CONTRACT_ADDRESS = '0xD83e4b9C46f9038506572E9Caf09AD14E27e49cD';
-const TOKENS_CONFIG = {
-  ETH:   { address: '0x0000000000000000000000000000000000000000', decimals: 18 },
-  USDC:  { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
-  cbBTC: { address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', decimals: 8 },
+const NETWORKS_CONFIG = {
+  base: {
+    key: 'base', name: 'Base', chainIdDec: 8453, chainIdHex: '0x2105',
+    rpcUrl: 'https://mainnet.base.org', explorer: 'https://basescan.org',
+    nativeSymbol: 'ETH', contractAddress: '0xD83e4b9C46f9038506572E9Caf09AD14E27e49cD',
+    tokens: {
+      ETH:   { address: '0x0000000000000000000000000000000000000000', decimals: 18 },
+      USDC:  { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
+      cbBTC: { address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', decimals: 8 },
+    }
+  },
+  bsc: {
+    key: 'bsc', name: 'BNB Smart Chain', chainIdDec: 56, chainIdHex: '0x38',
+    rpcUrl: 'https://bsc-dataseed.binance.org', explorer: 'https://bscscan.com',
+    nativeSymbol: 'BNB', contractAddress: '0xc191880AB13aB8e6387f8857c657c9bFA760263e',
+    tokens: {
+      BNB:  { address: '0x0000000000000000000000000000000000000000', decimals: 18 },
+      USDY: { address: '0x608593d17A2decBbc4399e4185bE4922F97eD32E', decimals: 18 },
+    }
+  }
 };
+function getRedConfig(red) { return NETWORKS_CONFIG[red] || NETWORKS_CONFIG.base; }
+function explorerTx(red, hash) { return getRedConfig(red).explorer + '/tx/' + hash; }
+function explorerAddress(red, addr) { return getRedConfig(red).explorer + '/address/' + addr; }
+async function ensureNetwork(red) {
+  const cfg = getRedConfig(red);
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const network = await provider.getNetwork();
+  if (Number(network.chainId) !== cfg.chainIdDec) {
+    try {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.chainIdHex }] });
+    } catch(e) {
+      if (e.code === 4902) {
+        await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{
+          chainId: cfg.chainIdHex, chainName: cfg.name,
+          nativeCurrency: { name: cfg.nativeSymbol, symbol: cfg.nativeSymbol, decimals: 18 },
+          rpcUrls: [cfg.rpcUrl], blockExplorerUrls: [cfg.explorer]
+        }] });
+      } else throw e;
+    }
+  }
+  return cfg;
+}
+// Compat: código legado que referencia estas constantes usa Base por defecto.
+const ESCROW_CONTRACT_ADDRESS = NETWORKS_CONFIG.base.contractAddress;
+const TOKENS_CONFIG = NETWORKS_CONFIG.base.tokens;
 let allLeasings = [];
 let allLeads = [];
 let currentLeaseId = null;
@@ -2458,7 +2510,7 @@ async function abrirDetalleLease(id) {
     document.getElementById('ld-resolver-disputa-box').style.display = (tieneOnchain && l.estado === 'disputado') ? 'block' : 'none';
 
     if (tieneOnchain) {
-      const basescanUrl = 'https://basescan.org/address/' + l.contrato_address_onchain;
+      const basescanUrl = explorerAddress(l.escrow_red, l.contrato_address_onchain);
       document.getElementById('ld-basescan-link').href = basescanUrl;
       document.getElementById('ld-contrato-address').innerHTML = '<a href="' + basescanUrl + '" target="_blank" style="color:#60a5fa;text-decoration:none">' + l.contrato_address_onchain.slice(0,8)+'...'+l.contrato_address_onchain.slice(-6) + ' ↗</a>';
     } else {
@@ -2680,15 +2732,12 @@ async function marcarCondicionInline() {
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 8453) {
-      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
-    }
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_token, escrow_red').eq('id', currentLeaseId).single();
+    const netCfgMC = await ensureNetwork(l.escrow_red || 'base');
     const signer = await provider.getSigner();
-    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_token').eq('id', currentLeaseId).single();
     const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
     const tx = await contract.completeCondition(parseInt(l.lease_id_onchain), parseInt(condIdx), favorLessor, { gasLimit: 300000 });
-    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en ' + netCfgMC.name + '...</div>';
     await tx.wait();
 
     await sbAdmin.from('condiciones_escrow').update({
@@ -2703,7 +2752,7 @@ async function marcarCondicionInline() {
     });
 
     await registrarLog('complete_condition', 'Marcó condición #' + condIdx + ' del lease ' + l.lease_id_onchain);
-    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="' + explorerTx(l.escrow_red, tx.hash) + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
     showToast('✓ Condición marcada en blockchain');
     setTimeout(() => abrirDetalleLease(currentLeaseId), 2000);
   } catch(e) {
@@ -2725,8 +2774,9 @@ async function ejecutarDisputaInline() {
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_red').eq('id', currentLeaseId).single();
+    await ensureNetwork(l.escrow_red || 'base');
     const signer = await provider.getSigner();
-    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain').eq('id', currentLeaseId).single();
     const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
     const tx = await contract.raiseDispute(parseInt(l.lease_id_onchain));
     await tx.wait();
@@ -2734,7 +2784,7 @@ async function ejecutarDisputaInline() {
     await registrarEventoEscrow(currentLeaseId, l.lease_id_onchain, 'disputa_iniciada', { tx_hash: tx.hash });
     await registrarLog('raise_dispute', 'Inició disputa en lease ' + l.lease_id_onchain);
     showToast('⚠️ Disputa iniciada en blockchain');
-    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--yellow)">Ver TX ↗</a></div>';
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="' + explorerTx(l.escrow_red, tx.hash) + '" target="_blank" style="color:var(--yellow)">Ver TX ↗</a></div>';
     setTimeout(() => abrirDetalleLease(currentLeaseId), 1500);
   } catch(e) {
     document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-error">' + (e.reason || e.message || 'Error') + '</div>';
@@ -2758,11 +2808,12 @@ async function resolverDisputaInline() {
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
+    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_monto, escrow_red').eq('id', currentLeaseId).single();
+    const netCfgRD = await ensureNetwork(l.escrow_red || 'base');
     const signer = await provider.getSigner();
-    const { data: l } = await sbAdmin.from('contratos').select('contrato_address_onchain, lease_id_onchain, escrow_monto').eq('id', currentLeaseId).single();
     const contract = new ethers.Contract(l.contrato_address_onchain, LEASE_ABI, signer);
     const tx = await contract.resolveDispute(parseInt(l.lease_id_onchain), favorLessor);
-    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en ' + netCfgRD.name + '...</div>';
     await tx.wait();
 
     // El árbitro resuelve el TOTAL del saldo bloqueado restante a una sola parte
@@ -2776,7 +2827,7 @@ async function resolverDisputaInline() {
       tx_hash: tx.hash, favor_lessor: favorLessor, monto: l.escrow_monto
     });
     await registrarLog('resolve_dispute', 'Resolvió disputa del lease ' + l.lease_id_onchain + ' a favor de ' + (favorLessor ? 'lessor' : 'lessee'));
-    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Disputa resuelta. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
+    document.getElementById('ld-blockchain-msg').innerHTML = '<div class="alert alert-success">✓ Disputa resuelta. <a href="' + explorerTx(l.escrow_red, tx.hash) + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
     showToast('✓ Disputa resuelta en blockchain');
     setTimeout(() => abrirDetalleLease(currentLeaseId), 1500);
   } catch(e) {
@@ -2907,12 +2958,20 @@ async function editarEstadoLease() {
 function toggleEscrowFields() {
   const tipo = document.getElementById('nl-tipo').value;
   document.getElementById('escrow-fields').style.display = tipo === 'escrow_blockchain' ? 'block' : 'none';
+  if (tipo === 'escrow_blockchain') actualizarTokensEscrowNL();
+}
+function actualizarTokensEscrowNL() {
+  const red = document.getElementById('nl-escrow-red').value || 'base';
+  const cfg = NETWORKS_CONFIG[red];
+  const sel = document.getElementById('nl-escrow-token');
+  sel.innerHTML = Object.keys(cfg.tokens).map(k => '<option value="' + k + '">' + k + '</option>').join('');
 }
 
 // ══════════════════════════════════════════════════════════════════
 // BLOCKCHAIN — TAB DEDICADO (consulta y operaciones directas por Lease ID)
 // ══════════════════════════════════════════════════════════════════
 let bcWalletConnected = false;
+let bcRedActual = 'base';
 
 function initBlockchainTab() {
   document.getElementById('bc-no-wallet').style.display = bcWalletConnected ? 'none' : 'block';
@@ -2922,19 +2981,17 @@ function initBlockchainTab() {
 async function conectarWalletBlockchain() {
   if (!window.ethereum) { showToast('Instalá MetaMask para operar'); return; }
   try {
+    bcRedActual = document.getElementById('bc-network').value || 'base';
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 8453) {
-      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] }); }
-      catch(e) { if (e.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x2105', chainName: 'Base', nativeCurrency: { name:'Ether', symbol:'ETH', decimals:18 }, rpcUrls: ['https://mainnet.base.org'], blockExplorerUrls: ['https://basescan.org'] }] }); }
-    }
+    const netCfg = await ensureNetwork(bcRedActual);
     const signer = await provider.getSigner();
     const address = await signer.getAddress();
     bcWalletConnected = true;
     document.getElementById('bc-wallet-addr').textContent = address.slice(0,6) + '…' + address.slice(-4);
+    document.getElementById('bc-wallet-network').textContent = netCfg.name + ' Mainnet';
     initBlockchainTab();
-    showToast('✓ Wallet conectada · Base Mainnet');
+    showToast('✓ Wallet conectada · ' + netCfg.name);
   } catch(e) {
     showToast('Error al conectar: ' + (e.message || ''));
   }
@@ -2950,13 +3007,14 @@ async function consultarLeaseOnchain() {
   if (!leaseId) { showToast('Ingresá un Lease ID'); return; }
   resEl.innerHTML = '<div class="alert alert-warning">Consultando el contrato...</div>';
   try {
+    const netCfgQ = getRedConfig(bcRedActual);
     const provider = new ethers.BrowserProvider(window.ethereum);
-    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, provider);
+    const contract = new ethers.Contract(netCfgQ.contractAddress, LEASE_ABI, provider);
     const lease = await contract.getLease(parseInt(leaseId));
     const conds = await contract.getConditions(parseInt(leaseId));
 
     const decimals = lease.token === '0x0000000000000000000000000000000000000000' ? 18 :
-      (Object.values(TOKENS_CONFIG).find(t => t.address.toLowerCase() === lease.token.toLowerCase())?.decimals ?? 18);
+      (Object.values(netCfgQ.tokens).find(t => t.address.toLowerCase() === lease.token.toLowerCase())?.decimals ?? 18);
 
     let html = '<div style="background:var(--gray);border-radius:10px;padding:14px;margin-bottom:10px">';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">';
@@ -2986,8 +3044,9 @@ async function consultarLeaseOnchain() {
 // Busca en Supabase el contrato correspondiente a un lease_id_onchain, para
 // mantener sincronizados condiciones_escrow / escrow_liberado también cuando
 // la acción se ejecuta desde este tab (y no desde el detalle del leasing).
-async function buscarContratoPorLeaseId(leaseId) {
-  const { data } = await sbAdmin.from('contratos').select('id').eq('lease_id_onchain', parseInt(leaseId)).eq('contrato_address_onchain', ESCROW_CONTRACT_ADDRESS).maybeSingle();
+async function buscarContratoPorLeaseId(leaseId, red) {
+  const cfg = getRedConfig(red);
+  const { data } = await sbAdmin.from('contratos').select('id').eq('lease_id_onchain', parseInt(leaseId)).eq('contrato_address_onchain', cfg.contractAddress).maybeSingle();
   return data?.id || null;
 }
 
@@ -3005,22 +3064,19 @@ async function completarCondicionStandalone() {
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 8453) {
-      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
-    }
+    const netCfgC = await ensureNetwork(bcRedActual);
     const signer = await provider.getSigner();
     const signerAddr = await signer.getAddress();
     document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Firmando con ' + signerAddr.slice(0,8) + '...' + signerAddr.slice(-6) + '</div>';
-    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
+    const contract = new ethers.Contract(netCfgC.contractAddress, LEASE_ABI, signer);
     const tx = await contract.completeCondition(parseInt(leaseId), parseInt(condIdx), favorLessor, { gasLimit: 300000 });
-    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en ' + netCfgC.name + '...</div>';
     await tx.wait();
 
-    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
+    document.getElementById('bc-complete-msg').innerHTML = '<div class="alert alert-success">✓ Condición marcada. <a href="' + explorerTx(bcRedActual, tx.hash) + '" target="_blank" style="color:var(--green)">Ver TX ↗</a></div>';
     showToast('✓ Condición marcada en blockchain');
 
-    const contratoId = await buscarContratoPorLeaseId(leaseId);
+    const contratoId = await buscarContratoPorLeaseId(leaseId, bcRedActual);
     if (contratoId) {
       await sbAdmin.from('condiciones_escrow').update({
         estado: 'cumplida', favor_lessor: favorLessor, tx_hash: tx.hash,
@@ -3056,15 +3112,16 @@ async function iniciarDisputaStandalone() {
   try {
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
+    const netCfgD = await ensureNetwork(bcRedActual);
     const signer = await provider.getSigner();
-    const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
+    const contract = new ethers.Contract(netCfgD.contractAddress, LEASE_ABI, signer);
     const tx = await contract.raiseDispute(parseInt(leaseId));
     await tx.wait();
 
-    document.getElementById('bc-dispute-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="https://basescan.org/tx/' + tx.hash + '" target="_blank" style="color:#92400e">Ver TX ↗</a></div>';
+    document.getElementById('bc-dispute-msg').innerHTML = '<div class="alert alert-warning">⚠️ Disputa iniciada. <a href="' + explorerTx(bcRedActual, tx.hash) + '" target="_blank" style="color:#92400e">Ver TX ↗</a></div>';
     showToast('⚠️ Disputa iniciada en blockchain');
 
-    const contratoId = await buscarContratoPorLeaseId(leaseId);
+    const contratoId = await buscarContratoPorLeaseId(leaseId, bcRedActual);
     if (contratoId) {
       await sbAdmin.from('contratos').update({ estado: 'disputado' }).eq('id', contratoId);
       await registrarEventoEscrow(contratoId, leaseId, 'disputa_iniciada', { tx_hash: tx.hash, detalle: { origen: 'tab_blockchain' } });
@@ -3431,19 +3488,18 @@ async function crearLease() {
       const { data: vehiculo } = await sbAdmin.from('vehiculos').select('marca, modelo, anio, vin').eq('id', vehiculoId).single();
       if (!vehiculo || !vehiculo.vin) throw new Error('El vehículo seleccionado no tiene VIN cargado.');
 
-      const tokenCfg = TOKENS_CONFIG[tokenKey];
+      const redSeleccionada = document.getElementById('nl-escrow-red').value || 'base';
+      const netCfg = NETWORKS_CONFIG[redSeleccionada];
+      const tokenCfg = netCfg.tokens[tokenKey];
       const leaseDurationDays = fechaInicio && plazo ? parseInt(plazo) * 30 : 365;
 
       document.getElementById('nl-msg').innerHTML = '<div class="alert alert-warning">Conectando MetaMask...</div>';
       const provider = new ethers.BrowserProvider(window.ethereum);
       await provider.send('eth_requestAccounts', []);
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== 8453) {
-        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
-      }
+      await ensureNetwork(redSeleccionada);
       const signer = await provider.getSigner();
       const walletLessor = await signer.getAddress();
-      const contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, LEASE_ABI, signer);
+      const contract = new ethers.Contract(netCfg.contractAddress, LEASE_ABI, signer);
 
       document.getElementById('nl-msg').innerHTML = '<div class="alert alert-warning">Confirmá la creación del lease en MetaMask...</div>';
       const tx = await contract.createLease(
@@ -3459,7 +3515,7 @@ async function crearLease() {
         nlCondiciones.map(c => c.desc),
         nlCondiciones.map(c => parseInt(c.bps))
       );
-      document.getElementById('nl-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en Base...</div>';
+      document.getElementById('nl-msg').innerHTML = '<div class="alert alert-warning">Esperando confirmación en ' + netCfg.name + '...</div>';
       const receipt = await tx.wait();
 
       // Extraer el leaseId del evento LeaseCreated
@@ -3475,8 +3531,8 @@ async function crearLease() {
         leaseIdOnchain = Number(await contract.leaseCounter());
       }
 
-      onchainData = { address: ESCROW_CONTRACT_ADDRESS, leaseId: leaseIdOnchain, txHash: tx.hash, lessor: walletLessor };
-      showToast('✓ Lease creado en Base — TX ' + tx.hash.slice(0,10) + '...');
+      onchainData = { address: netCfg.contractAddress, leaseId: leaseIdOnchain, txHash: tx.hash, lessor: walletLessor, red: redSeleccionada };
+      showToast('✓ Lease creado en ' + netCfg.name + ' — TX ' + tx.hash.slice(0,10) + '...');
     }
 
     // Calcular fecha fin
@@ -3520,6 +3576,7 @@ async function crearLease() {
       contratoData.contrato_address_onchain = onchainData.address;
       contratoData.lease_id_onchain = onchainData.leaseId;
       contratoData.tx_hash_creacion = onchainData.txHash;
+      contratoData.escrow_red = onchainData.red;
     }
 
     const { data: contrato, error: errContrato } = await sbAdmin.from('contratos').insert(contratoData).select('id').single();
