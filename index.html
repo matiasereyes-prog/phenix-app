@@ -4175,7 +4175,7 @@ async function eliminarUsuario(id, email, activo) {
 }
 
 async function cambiarRol(id, email, rolActual) {
-  const roles = ['lessee', 'ejecutivo', 'admin'];
+  const roles = ['lessee', 'ejecutivo', 'admin', 'concesionario'];
   const nuevo = prompt(`Rol actual: ${rolActual}
 Nuevo rol (${roles.join('/')}):`);
   if (!nuevo || !roles.includes(nuevo) || nuevo === rolActual) return;
@@ -4187,8 +4187,8 @@ Nuevo rol (${roles.join('/')}):`);
 }
 
 function rolBadge(rol) {
-  const map = { admin: 'badge-red', ejecutivo: 'badge-orange', lessee: 'badge-blue' };
-  const icons = { admin: '🔑', ejecutivo: '💼', lessee: '👤' };
+  const map = { admin: 'badge-red', ejecutivo: 'badge-orange', lessee: 'badge-blue', concesionario: 'badge-green' };
+  const icons = { admin: '🔑', ejecutivo: '💼', lessee: '👤', concesionario: '🚗' };
   return `<div class="badge ${map[rol]||'badge-gray'}">${icons[rol]||''} ${rol}</div>`;
 }
 
