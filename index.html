@@ -731,6 +731,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;font-size:13px;color:var(--text2)">
           <div>Monto a financiar: <b id="cz-capital">—</b></div>
           <div>Tasa anual aplicada: <b id="cz-tasa">—</b></div>
+          <div>Depósito en garantía: <b id="cz-garantia-monto">—</b></div>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:10px">Estimación no vinculante. Sujeta a aprobación crediticia final.</div>
       </div>
@@ -3328,6 +3329,7 @@ function calcularCuotaCotizador() {
     document.getElementById('cz-cuota').textContent = 'No califica';
     document.getElementById('cz-capital').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
+    document.getElementById('cz-garantia-monto').textContent = '—';
     return;
   }
 
@@ -3337,10 +3339,15 @@ function calcularCuotaCotizador() {
     document.getElementById('cz-cuota').textContent = 'Tasa no configurada';
     document.getElementById('cz-capital').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
+    document.getElementById('cz-garantia-monto').textContent = '—';
     return;
   }
 
-  const capitalFinanciado = valorAuto * (1 - garantiaPct / 100);
+  // La garantía es un depósito reembolsable (se devuelve al finalizar el
+  // contrato, salvo incumplimientos); solo define la columna de riesgo/tasa,
+  // no reduce el capital financiado. El auto se financia por su valor total.
+  const capitalFinanciado = valorAuto;
+  const depositoGarantia = valorAuto * (garantiaPct / 100);
   const i = tasaAnual / 100 / 12;
   const n = plazoMeses;
   const cuota = i === 0 ? capitalFinanciado / n : capitalFinanciado * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
@@ -3349,6 +3356,7 @@ function calcularCuotaCotizador() {
   document.getElementById('cz-cuota').textContent = 'USD ' + cuota.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-capital').textContent = 'USD ' + capitalFinanciado.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-tasa').textContent = tasaAnual + '%';
+  document.getElementById('cz-garantia-monto').textContent = 'USD ' + depositoGarantia.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 }
 
 async function loadEscrows() {
