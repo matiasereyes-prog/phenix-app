@@ -110,6 +110,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity 0.2s}
+/* modal-subir-doc se abre por encima de otros modales (ej. cuadro de amortización fullscreen); con z-index igual, el que aparece antes en el DOM queda tapado por el que aparece después */
+#modal-subir-doc{z-index:1100}
 .modal-overlay.show{opacity:1;pointer-events:all}
 .modal-card{background:white;border-radius:20px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.2);transform:translateY(20px);transition:transform 0.2s}
 .modal-overlay.show .modal-card{transform:translateY(0)}
@@ -1820,38 +1822,6 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
             <th style="min-width:110px">Saldo restante</th>
             <th style="min-width:90px">Estado</th>
             <th style="min-width:90px">Acción</th>
-          </tr>
-        </thead>
-        <tbody id="tbody-liquidacion-fs"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ══ MODAL: LIQUIDACION FULLSCREEN ══════════════════════════════ -->
-<div class="modal-overlay" id="modal-liquidacion-fs" style="align-items:flex-start;padding:20px">
-  <div class="modal-card" style="max-width:100%;width:100%;max-height:90vh;overflow-y:auto;margin-top:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="font-family:var(--display);font-size:18px;font-weight:700">Cuadro de amortización</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <label class="btn btn-outline btn-sm" style="cursor:pointer">
-          ⬆ Importar Excel
-          <input type="file" id="import-excel-cuotas-fs" accept=".xlsx,.xls" style="display:none" onchange="importarCuotasExcelFS(this)"/>
-        </label>
-        <button class="btn btn-outline btn-sm" onclick="abrirAgregarAdicional()">+ Adicional</button>
-        <button class="btn btn-outline btn-sm" onclick="exportarLiquidacion()">⬇ Excel</button>
-        <button class="btn btn-outline btn-sm" onclick="openModal('modal-subir-doc')">📎 Doc</button>
-        <button onclick="closeModal('modal-liquidacion-fs')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 12px;font-size:16px;cursor:pointer">✕</button>
-      </div>
-    </div>
-    <div id="import-excel-msg-fs" style="margin-bottom:8px"></div>
-    <div style="overflow-x:auto">
-      <table class="data-table" id="table-liquidacion-fs" style="min-width:1000px;width:100%">
-        <thead>
-          <tr>
-            <th>#</th><th>Vencimiento</th><th>Cuota</th><th>Amortización</th>
-            <th>Interés</th><th>IVA</th><th>Seguro</th><th>Adicionales</th>
-            <th>Total</th><th>Saldo restante</th><th>Estado</th><th>Acción</th>
           </tr>
         </thead>
         <tbody id="tbody-liquidacion-fs"></tbody>
@@ -3919,7 +3889,10 @@ async function actualizarLead() {
 // VEHICULOS
 // ══════════════════════════════════════════════════════════════════
 async function loadVehiculos() {
-  const { data } = await sbAdmin.from('vehiculos').select('*').order('created_at',{ascending:false});
+  const soloFlotaPropia = document.getElementById('filtro-flota-propia')?.checked ?? true;
+  let vQuery = sbAdmin.from('vehiculos').select('*').order('created_at',{ascending:false});
+  if (soloFlotaPropia) vQuery = vQuery.eq('flota_propia', true);
+  const { data } = await vQuery;
   const tbody = document.getElementById('tbody-vehiculos');
   if (tbody && data) {
     if (!data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-text">Sin vehículos registrados.</div></div></td></tr>`; }
@@ -4928,10 +4901,15 @@ async function importarCuotasExcel(input) {
     const kMonto   = findKey('importe', 'monto') || keys[2];
     const kCapital = findKey('amort', 'capital') || keys[3];
     const kInteres = findKey('inter') || keys[4];
-    const kIva     = findKey('iva') || keys[5];
-    const kSeguro  = findKey('seguro') || keys[6];
-    const kAdicion = findKey('adicional') || keys[7];
-    const kSaldo   = findKey('saldo') || keys[8];
+    // IVA, Seguro y Adicionales son columnas opcionales: si no se encuentra
+    // una columna con ese nombre exacto, se deja sin mapear (null) en vez de
+    // adivinar por posición — adivinar por posición fue la causa de que el
+    // importador cargara el Saldo en la columna Seguro cuando el archivo no
+    // traía alguna de las columnas opcionales anteriores.
+    const kIva     = findKey('iva');
+    const kSeguro  = findKey('seguro');
+    const kAdicion = findKey('adicional');
+    const kSaldo   = findKey('saldo') || keys[keys.length - 1];
 
     console.log('Column mapping:', { kNum, kFecha, kMonto, kCapital, kInteres, kSaldo });
 
@@ -5087,7 +5065,14 @@ async function guardarAdicional() {
 
   showToast('✓ Adicional agregado a cuota N° ' + numCuota);
   closeModal('modal-nuevo-adicional');
-  loadLiquidacion();
+  // Refrescar la tabla que esté visible: la del detalle normal y/o la del
+  // cuadro de amortización a pantalla completa (antes solo se refrescaba
+  // loadLiquidacion(), por eso el adicional no aparecía hasta cerrar y
+  // volver a abrir el cuadro fullscreen).
+  if (typeof loadLiquidacion === 'function') loadLiquidacion();
+  if (typeof loadLiquidacionFS === 'function' && document.getElementById('modal-liquidacion-fs')?.classList.contains('show')) {
+    loadLiquidacionFS();
+  }
   await registrarLog('agregar_adicional', 'Agregó ' + tipo + ' de $' + monto + ' a cuota #' + numCuota);
 }
 
@@ -5177,11 +5162,14 @@ async function confirmarPagoCuota() {
       const ext = file.name.split('.').pop();
       const path = contrato.usuario_id + '/comprobante_cuota_' + cuotaId + '_' + Date.now() + '.' + ext;
       const { error: uploadError } = await sbAdmin.storage.from('documentos').upload(path, file);
-      if (!uploadError) {
+      if (uploadError) {
+        console.error('Error subiendo comprobante:', uploadError);
+        document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">No se pudo subir el comprobante: ' + uploadError.message + '. La cuota se marcará como paga sin comprobante adjunto.</div>';
+      } else {
         const { data: { publicUrl } } = sbAdmin.storage.from('documentos').getPublicUrl(path);
         comprobanteUrl = publicUrl;
         // Guardar en documentos
-        await sbAdmin.from('documentos').insert({
+        const { error: docInsertError } = await sbAdmin.from('documentos').insert({
           usuario_id: contrato.usuario_id,
           contrato_id: lease.contrato_id,
           tipo: 'comprobante_pago',
@@ -5189,6 +5177,10 @@ async function confirmarPagoCuota() {
           observacion: 'Comprobante cuota #' + cuotaId,
           estado: 'aprobado'
         });
+        if (docInsertError) {
+          console.error('Error guardando documento en DB:', docInsertError);
+          document.getElementById('mp-msg').innerHTML = '<div class="alert alert-error">El comprobante se subió pero no se pudo registrar: ' + docInsertError.message + '</div>';
+        }
       }
     }
 
@@ -5929,10 +5921,15 @@ async function importarExcelAlContrato(contratoId) {
     const kMonto   = findKey('importe', 'monto') || keys[2];
     const kCapital = findKey('amort', 'capital') || keys[3];
     const kInteres = findKey('inter') || keys[4];
-    const kIva     = findKey('iva') || keys[5];
-    const kSeguro  = findKey('seguro') || keys[6];
-    const kAdicion = findKey('adicional') || keys[7];
-    const kSaldo   = findKey('saldo') || keys[8];
+    // IVA, Seguro y Adicionales son columnas opcionales: si no se encuentra
+    // una columna con ese nombre exacto, se deja sin mapear (null) en vez de
+    // adivinar por posición — adivinar por posición fue la causa de que el
+    // importador cargara el Saldo en la columna Seguro cuando el archivo no
+    // traía alguna de las columnas opcionales anteriores.
+    const kIva     = findKey('iva');
+    const kSeguro  = findKey('seguro');
+    const kAdicion = findKey('adicional');
+    const kSaldo   = findKey('saldo') || keys[keys.length - 1];
 
     const cuotasData = [];
     for (const row of jsonRows) {
