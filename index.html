@@ -132,7 +132,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
 /* ── KPI ── */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-.kpi-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+.kpi-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(0,0,0,0.10)}
+.kpi-card:active{transform:translateY(0)}
 .kpi-card.dark{background:var(--black)}
 .kpi-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px}
 .kpi-card.dark .kpi-label{color:rgba(255,255,255,0.4)}
@@ -277,22 +279,22 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="btn btn-orange" onclick="abrirNuevoLease()">+ Nuevo leasing</button>
       </div>
       <div class="kpi-grid">
-        <div class="kpi-card dark">
+        <div class="kpi-card dark" onclick="irALeasingsActivos()" title="Ver leasings activos">
           <div class="kpi-label">Leasings activos</div>
           <div class="kpi-value" id="kpi-activos">—</div>
           <div class="kpi-sub">contratos en curso</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" onclick="showView('clientes')" title="Ver clientes">
           <div class="kpi-label">Clientes</div>
           <div class="kpi-value" id="kpi-clientes">—</div>
           <div class="kpi-sub">usuarios registrados</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" onclick="irALeadsNuevos()" title="Ver leads nuevos">
           <div class="kpi-label">Leads nuevos</div>
           <div class="kpi-value" id="kpi-leads">—</div>
           <div class="kpi-sub">sin contactar</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" onclick="irACuotasVencidas()" title="Ver leasings con cuotas vencidas">
           <div class="kpi-label">Cuotas vencidas</div>
           <div class="kpi-value" id="kpi-vencidas" style="color:var(--red)">—</div>
           <div class="kpi-sub">requieren atención</div>
@@ -320,6 +322,10 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <button class="btn btn-outline" onclick="exportarExcel('leasings')">⬇ Excel</button>
           <button class="btn btn-orange" onclick="abrirNuevoLease()">+ Nuevo leasing</button>
         </div>
+      </div>
+      <div id="leasings-filter-banner" style="display:none;background:var(--red-bg);border:1.5px solid var(--red);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13px;font-weight:600;color:var(--red)">⚠ Mostrando solo leasings con cuotas vencidas</span>
+        <button class="btn btn-outline btn-sm" onclick="quitarFiltroVencidas()">Quitar filtro ✕</button>
       </div>
       <div class="search-bar">
         <input class="search-input" type="text" id="search-leasings" placeholder="Buscar por cliente o vehículo..." oninput="filterLeasings()"/>
@@ -2357,6 +2363,8 @@ async function loadLeasings() {
   renderLeasingsTable('tbody-leasings', allLeasings, false);
 }
 
+let soloVencidasIds = null;
+
 function filterLeasings() {
   const q = document.getElementById('search-leasings').value.toLowerCase();
   const estado = document.getElementById('filter-estado').value;
@@ -2365,9 +2373,50 @@ function filterLeasings() {
     const matchQ = !q || (l.usuarios?.nombre||'').toLowerCase().includes(q) || (l.vehiculos?.modelo||'').toLowerCase().includes(q);
     const matchEstado = !estado || l.estado === estado;
     const matchTipo = !tipo || l.tipo === tipo;
-    return matchQ && matchEstado && matchTipo;
+    const matchVencidas = !soloVencidasIds || soloVencidasIds.has(l.id);
+    return matchQ && matchEstado && matchTipo && matchVencidas;
   });
   renderLeasingsTable('tbody-leasings', filtered, false);
+}
+
+function quitarFiltroVencidas() {
+  soloVencidasIds = null;
+  document.getElementById('leasings-filter-banner').style.display = 'none';
+  filterLeasings();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ACCIONES DE LAS TARJETAS DEL DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+async function irALeasingsActivos() {
+  showView('leasings');
+  await loadLeasings();
+  document.getElementById('search-leasings').value = '';
+  document.getElementById('filter-tipo').value = '';
+  document.getElementById('filter-estado').value = 'activo';
+  soloVencidasIds = null;
+  document.getElementById('leasings-filter-banner').style.display = 'none';
+  filterLeasings();
+}
+
+async function irALeadsNuevos() {
+  showView('leads');
+  await loadLeads();
+  document.getElementById('search-leads').value = '';
+  document.getElementById('filter-lead-estado').value = 'nuevo';
+  filterLeads();
+}
+
+async function irACuotasVencidas() {
+  showView('leasings');
+  await loadLeasings();
+  const { data: cv } = await sbAdmin.from('cuotas').select('contrato_id').eq('estado', 'vencida');
+  soloVencidasIds = new Set((cv || []).map(c => c.contrato_id));
+  document.getElementById('search-leasings').value = '';
+  document.getElementById('filter-estado').value = '';
+  document.getElementById('filter-tipo').value = '';
+  document.getElementById('leasings-filter-banner').style.display = 'flex';
+  filterLeasings();
 }
 
 function renderLeasingsTable(tbodyId, data, compact) {
