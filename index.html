@@ -726,8 +726,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
 
       <div id="cz-resultado" style="display:none;margin-top:20px;padding:20px;border-radius:var(--radius-sm);background:var(--bg)">
-        <div style="font-size:12px;color:var(--text3)">Cuota mensual estimada</div>
+        <div style="font-size:12px;color:var(--text3)">Cuota mensual total (con IVA 21%)</div>
         <div id="cz-cuota" style="font-family:var(--display);font-size:32px;font-weight:700;color:var(--accent)">—</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Cuota sin IVA: <b id="cz-cuota-sin-iva">—</b></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;font-size:13px;color:var(--text2)">
           <div>Monto a financiar: <b id="cz-capital">—</b></div>
           <div>Tasa anual aplicada: <b id="cz-tasa">—</b></div>
@@ -3327,6 +3328,7 @@ function calcularCuotaCotizador() {
   if (czUltimoRiesgo.categoria === 'no_califica') {
     resultado.style.display = 'block';
     document.getElementById('cz-cuota').textContent = 'No califica';
+    document.getElementById('cz-cuota-sin-iva').textContent = '—';
     document.getElementById('cz-capital').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
     document.getElementById('cz-garantia-monto').textContent = '—';
@@ -3337,6 +3339,7 @@ function calcularCuotaCotizador() {
   if (tasaAnual === undefined) {
     resultado.style.display = 'block';
     document.getElementById('cz-cuota').textContent = 'Tasa no configurada';
+    document.getElementById('cz-cuota-sin-iva').textContent = '—';
     document.getElementById('cz-capital').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
     document.getElementById('cz-garantia-monto').textContent = '—';
@@ -3350,10 +3353,13 @@ function calcularCuotaCotizador() {
   const depositoGarantia = valorAuto * (garantiaPct / 100);
   const i = tasaAnual / 100 / 12;
   const n = plazoMeses;
-  const cuota = i === 0 ? capitalFinanciado / n : capitalFinanciado * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
+  const cuotaSinIva = i === 0 ? capitalFinanciado / n : capitalFinanciado * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
+  const IVA_PCT = 0.21; // el canon se cotiza sin IVA y se le adiciona el 21% vigente, como en el contrato
+  const cuotaConIva = cuotaSinIva * (1 + IVA_PCT);
 
   resultado.style.display = 'block';
-  document.getElementById('cz-cuota').textContent = 'USD ' + cuota.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  document.getElementById('cz-cuota').textContent = 'USD ' + cuotaConIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  document.getElementById('cz-cuota-sin-iva').textContent = 'USD ' + cuotaSinIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-capital').textContent = 'USD ' + capitalFinanciado.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-tasa').textContent = tasaAnual + '%';
   document.getElementById('cz-garantia-monto').textContent = 'USD ' + depositoGarantia.toLocaleString('es-AR', { maximumFractionDigits: 2 });
