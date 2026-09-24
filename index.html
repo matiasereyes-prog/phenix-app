@@ -1855,9 +1855,18 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <label class="form-label">Concepto</label>
         <input class="form-input" id="ad-concepto" placeholder="Ej: Seguro semestral Zurich"/>
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label class="form-label">Monto</label>
         <input class="form-input" type="number" id="ad-monto" placeholder="0.00"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Moneda</label>
+        <select class="form-select" id="ad-moneda">
+          <option value="ARS">ARS (pesos)</option>
+          <option value="USD">USD</option>
+        </select>
       </div>
     </div>
     <div id="ad-msg"></div>
@@ -2635,6 +2644,9 @@ async function loadLiquidacion() {
       html += '<td style="font-size:10px;color:var(--green);padding:6px 8px">' + (c.fecha_pago ? formatFecha(c.fecha_pago) : '✓') + '</td>';
     }
     html += '</tr>';
+    if (parseFloat(c.adicionales_ars_monto || 0) > 0) {
+      html += '<tr><td colspan="12" style="font-size:10px;color:#a855f7;padding:2px 8px 6px">+ ARS ' + fmt(parseFloat(c.adicionales_ars_monto)) + ' en seguros/multas/gastos facturados en pesos (no incluido en el total en ' + (c.moneda||'USD') + ' de arriba)</td></tr>';
+    }
     if (isPaga && c.fecha_pago) {
       html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + (c.tx_hash ? ' · <a href="https://basescan.org/tx/' + c.tx_hash + '" target="_blank" style="color:var(--green)">TX ↗</a>' : '') + '</td></tr>';
     }
@@ -5009,6 +5021,9 @@ function abrirAgregarAdicional() {
   document.getElementById('ad-concepto').value = '';
   document.getElementById('ad-monto').value = '';
   document.getElementById('ad-tipo').value = 'seguro';
+  // Seguros, multas y gastos administrativos suelen facturarse en pesos
+  // aunque el contrato esté nominado en USD — default a ARS.
+  document.getElementById('ad-moneda').value = 'ARS';
   document.getElementById('ad-msg').innerHTML = '';
   openModal('modal-nuevo-adicional');
 }
@@ -5018,15 +5033,18 @@ async function guardarAdicional() {
   const tipo = document.getElementById('ad-tipo').value;
   const concepto = document.getElementById('ad-concepto').value.trim();
   const monto = parseFloat(document.getElementById('ad-monto').value);
+  const moneda = document.getElementById('ad-moneda').value;
 
   if (!numCuota || !concepto || !monto) {
     document.getElementById('ad-msg').innerHTML = '<div class="alert alert-error">Completá todos los campos.</div>';
     return;
   }
 
-  // Buscar la cuota correspondiente
+  // Buscar la cuota y la moneda del contrato (los adicionales pueden estar
+  // en una moneda distinta a la del canon — ej. seguros/multas en ARS
+  // sobre un contrato nominado en USD — así que nunca se suman a ciegas).
   const { data: cuota } = await sbAdmin.from('cuotas')
-    .select('id, monto, seguro, adicionales_monto')
+    .select('id, monto, seguro, adicionales_monto, adicionales_ars_monto')
     .eq('contrato_id', currentLeaseId)
     .eq('numero', numCuota)
     .maybeSingle();
@@ -5036,12 +5054,16 @@ async function guardarAdicional() {
     return;
   }
 
+  const { data: contratoMon } = await sbAdmin.from('contratos').select('moneda').eq('id', currentLeaseId).maybeSingle();
+  const monedaContrato = contratoMon?.moneda || 'USD';
+
   // Insertar en adicionales_cuota
   const { error } = await sbAdmin.from('adicionales_cuota').insert({
     cuota_id: cuota.id,
     concepto,
     monto,
-    tipo
+    tipo,
+    moneda
   });
 
   if (error) {
@@ -5049,21 +5071,36 @@ async function guardarAdicional() {
     return;
   }
 
-  // Si es seguro, actualizar campo seguro en cuota
-  if (tipo === 'seguro') {
+  // Si es seguro Y está en la misma moneda que el contrato, actualizar
+  // el campo seguro de la cuota (ese campo asume la moneda del contrato).
+  if (tipo === 'seguro' && moneda === monedaContrato) {
     const nuevoSeguro = (parseFloat(cuota.seguro) || 0) + monto;
     await sbAdmin.from('cuotas').update({ seguro: nuevoSeguro }).eq('id', cuota.id);
   }
 
-  // Actualizar total con adicionales
-  const { data: todos } = await sbAdmin.from('adicionales_cuota').select('monto').eq('cuota_id', cuota.id);
-  const totalAdicionales = (todos || []).reduce((sum, a) => sum + parseFloat(a.monto), 0);
+  // Recalcular totales — SIN mezclar monedas: adicionales_monto/total_con_adicionales
+  // siguen siendo en la moneda del contrato; los adicionales en otra moneda
+  // (típicamente ARS sobre contratos en USD) se acumulan aparte en
+  // adicionales_ars_monto, para mostrarse como línea separada en la liquidación.
+  const { data: todos } = await sbAdmin.from('adicionales_cuota').select('monto, moneda').eq('cuota_id', cuota.id);
+  const totalMismaMoneda = (todos || [])
+    .filter(a => (a.moneda || monedaContrato) === monedaContrato)
+    .reduce((sum, a) => sum + parseFloat(a.monto), 0);
+  const totalOtraMoneda = (todos || [])
+    .filter(a => (a.moneda || monedaContrato) !== monedaContrato)
+    .reduce((sum, a) => sum + parseFloat(a.monto), 0);
+
   await sbAdmin.from('cuotas').update({
-    adicionales_monto: totalAdicionales,
-    total_con_adicionales: (parseFloat(cuota.monto) || 0) + totalAdicionales
+    adicionales_monto: totalMismaMoneda,
+    adicionales_ars_monto: totalOtraMoneda,
+    total_con_adicionales: (parseFloat(cuota.monto) || 0) + totalMismaMoneda
   }).eq('id', cuota.id);
 
-  showToast('✓ Adicional agregado a cuota N° ' + numCuota);
+  if (moneda !== monedaContrato) {
+    showToast('✓ Adicional en ' + moneda + ' agregado a cuota N° ' + numCuota + ' — se muestra por separado del canon en ' + monedaContrato + '.');
+  } else {
+    showToast('✓ Adicional agregado a cuota N° ' + numCuota);
+  }
   closeModal('modal-nuevo-adicional');
   // Refrescar la tabla que esté visible: la del detalle normal y/o la del
   // cuadro de amortización a pantalla completa (antes solo se refrescaba
@@ -5315,6 +5352,9 @@ async function loadLiquidacionFS() {
     }
     html += '</td>';
     html += '</tr>';
+    if (parseFloat(c.adicionales_ars_monto || 0) > 0) {
+      html += '<tr><td colspan="12" style="font-size:10px;color:#a855f7;padding:2px 8px 6px">+ ARS ' + fmt(parseFloat(c.adicionales_ars_monto)) + ' en seguros/multas/gastos facturados en pesos (no incluido en el total de arriba)</td></tr>';
+    }
     if (isPaga && c.fecha_pago) {
       const comprobanteLink = c.tx_hash && c.tx_hash.startsWith('http') ? ' · <a href="' + c.tx_hash + '" target="_blank" style="color:var(--green);font-weight:700">📎 Ver comprobante ↗</a>' : (c.tx_hash ? ' · TX: ' + c.tx_hash.slice(0,10) + '...' : '');
       html += '<tr style="background:#f0fdf4"><td colspan="12" style="font-size:10px;color:var(--green);padding:2px 8px 6px">✓ Pagada el ' + formatFecha(c.fecha_pago) + (c.medio_pago ? ' · ' + c.medio_pago : '') + comprobanteLink + '</td></tr>';
