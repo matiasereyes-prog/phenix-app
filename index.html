@@ -1514,7 +1514,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <label class="form-label">Adjuntar comprobante (opcional)</label>
       <div style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer" onclick="document.getElementById('mp-file').click()">
         <div style="font-size:20px;margin-bottom:4px">📎</div>
-        <div style="font-size:12px;color:var(--text2)">PDF, JPG, PNG — máx. 10MB</div>
+        <div style="font-size:12px;color:var(--text2)">PDF, JPG, PNG — máx. 1MB</div>
         <input type="file" id="mp-file" style="display:none" accept=".pdf,.jpg,.jpeg,.png"/>
       </div>
       <div id="mp-filename" style="font-size:12px;color:var(--green);margin-top:6px"></div>
@@ -1558,7 +1558,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div style="border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer" onclick="document.getElementById('sd-file').click()">
         <div style="font-size:24px;margin-bottom:6px">📎</div>
         <div style="font-size:13px;color:var(--text2)">Click para seleccionar archivo</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px">PDF, JPG, PNG — máx. 10MB</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">PDF, JPG, PNG — máx. 1MB</div>
         <input type="file" id="sd-file" style="display:none" accept=".pdf,.jpg,.jpeg,.png"/>
       </div>
       <div id="sd-filename" style="font-size:12px;color:var(--text2);margin-top:6px"></div>
@@ -5262,8 +5262,8 @@ async function subirDocumentoBackend() {
     document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">Selecciona un archivo.</div>';
     return;
   }
-  if (file.size > 10 * 1024 * 1024) {
-    document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">El archivo supera los 10MB.</div>';
+  if (file.size > 1 * 1024 * 1024) {
+    document.getElementById('sd-msg').innerHTML = '<div class="alert alert-error">El archivo supera 1MB.</div>';
     return;
   }
 
