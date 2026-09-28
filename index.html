@@ -4957,7 +4957,7 @@ async function importarCuotasExcel(input) {
       return;
     }
 
-    const { data: existentes } = await sbAdmin.from('cuotas').select('id, numero').eq('contrato_id', currentLeaseId).order('numero');
+    const { data: existentes } = await sbAdmin.from('cuotas').select('id, numero, monto, adicionales_monto').eq('contrato_id', currentLeaseId).order('numero');
     let updated = 0, inserted = 0;
 
     for (const c of cuotasData) {
@@ -4972,10 +4972,16 @@ async function importarCuotasExcel(input) {
         if (c.seguro !== null)            upd.seguro = c.seguro;
         if (c.adicionales_monto !== null) upd.adicionales_monto = c.adicionales_monto;
         if (c.saldo_restante !== null)    upd.saldo_restante = c.saldo_restante;
+        // Recalcular total_con_adicionales para que no quede desactualizado tras el import
+        // (ver: bug reportado 28/09 donde el total quedaba pegado a un monto viejo)
+        const montoFinalUpd = c.monto !== null ? c.monto : parseFloat(existente.monto || 0);
+        const adicFinalUpd = c.adicionales_monto !== null ? c.adicionales_monto : parseFloat(existente.adicionales_monto || 0);
+        upd.total_con_adicionales = montoFinalUpd + adicFinalUpd;
         await sbAdmin.from('cuotas').update(upd).eq('id', existente.id);
         updated++;
       } else {
-        await sbAdmin.from('cuotas').insert({ contrato_id: currentLeaseId, estado: 'pendiente', ...c });
+        const totalNueva = (c.monto || 0) + (c.adicionales_monto || 0);
+        await sbAdmin.from('cuotas').insert({ contrato_id: currentLeaseId, estado: 'pendiente', total_con_adicionales: totalNueva, ...c });
         inserted++;
       }
     }
