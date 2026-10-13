@@ -1046,7 +1046,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
       <div class="form-group">
         <label class="form-label">Teléfono</label>
-        <input class="form-input" id="nc-telefono" placeholder="+54 11 ..."/>
+        <input class="form-input" id="nc-telefono" placeholder="+54 9 11 1234-5678" inputmode="tel"/>
       </div>
     </div>
     <div class="form-row">
@@ -1134,6 +1134,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button onclick="closeModal('modal-detalle-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
     </div>
     <div class="detail-grid" id="lead-grid"></div>
+    <div id="lead-datos" style="margin-top:16px"></div>
     <div class="form-group" style="margin-top:16px">
       <label class="form-label">Cambiar estado</label>
       <select class="form-select" id="lead-nuevo-estado">
@@ -1611,7 +1612,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Teléfono</label>
-        <input class="form-input" id="nu-telefono" placeholder="+54 11 ..."/>
+        <input class="form-input" id="nu-telefono" placeholder="+54 9 11 1234-5678 (obligatorio para clientes)" inputmode="tel"/>
       </div>
       <div class="form-group">
         <label class="form-label">CUIT / CUIL</label>
@@ -3808,6 +3809,24 @@ async function abrirDetalleCliente(id) {
 }
 
 
+// Teléfono obligatorio: celular argentino, se guarda como +549 + 10 dígitos (ej: +5491159635648)
+function normalizarTelefonoAR(raw) {
+  const txt = String(raw || '').trim();
+  if (!txt) return { ok: true, value: null };
+  let d = txt.replace(/\D/g, '');
+  let r;
+  if (d.startsWith('54')) {
+    r = d.slice(2);
+    if (r.length === 11 && r.startsWith('9')) r = r.slice(1);
+  } else {
+    r = d.startsWith('0') ? d.slice(1) : d;
+  }
+  if (!/^[1-9][0-9]{9}$/.test(r)) {
+    return { ok: false, value: null, error: 'Teléfono inválido. Usá el formato +54 9 11 1234-5678 (celular argentino: código de área + número, 10 dígitos, sin 0 ni 15).' };
+  }
+  return { ok: true, value: '+549' + r };
+}
+
 async function crearCliente() {
   const nombre = document.getElementById('nc-nombre').value.trim();
   const email = document.getElementById('nc-email').value.trim();
@@ -3816,7 +3835,12 @@ async function crearCliente() {
   const cuit = document.getElementById('nc-cuit').value.trim();
   const wallet = document.getElementById('nc-wallet').value.trim();
   if (!nombre || !email) { document.getElementById('nc-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>'; return; }
-  const { error } = await sbAdmin.from('usuarios').insert({ nombre, email, tipo, telefono, cuit, wallet_address: wallet || null, rol:'lessee' });
+  const tel = normalizarTelefonoAR(telefono);
+  if (!tel.ok || !tel.value) {
+    document.getElementById('nc-msg').innerHTML = '<div class="alert alert-error">' + (tel.error || 'El teléfono es obligatorio. Usá el formato +54 9 11 1234-5678.') + '</div>';
+    return;
+  }
+  const { error } = await sbAdmin.from('usuarios').insert({ nombre, email, tipo, telefono: tel.value, cuit, wallet_address: wallet || null, rol:'lessee' });
   if (error) { document.getElementById('nc-msg').innerHTML = `<div class="alert alert-error">${error.message}</div>`; return; }
   showToast('✓ Cliente creado');
   closeModal('modal-nuevo-cliente');
@@ -3880,6 +3904,7 @@ function abrirDetalleLead(id) {
   ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
   openModal('modal-detalle-lead');
   loadHistorialLead(currentLeadId);
+  loadDatosLead(currentLeadId);
 }
 
 async function actualizarLead() {
@@ -4095,6 +4120,11 @@ async function crearUsuario() {
     document.getElementById('nu-msg').innerHTML = '<div class="alert alert-error">Nombre y email son obligatorios.</div>';
     return;
   }
+  const tel = normalizarTelefonoAR(telefono);
+  if (!tel.ok || (rol === 'lessee' && !tel.value)) {
+    document.getElementById('nu-msg').innerHTML = '<div class="alert alert-error">' + (tel.error || 'El teléfono es obligatorio para clientes. Usá el formato +54 9 11 1234-5678.') + '</div>';
+    return;
+  }
 
   document.getElementById('btn-crear-usuario').disabled = true;
   document.getElementById('crear-usuario-text').style.display = 'none';
@@ -4116,7 +4146,7 @@ async function crearUsuario() {
       ? 'https://portal.phenixleasing.com'
       : 'https://app.phenixleasing.com';
 
-    await edgeUsers('create_user', { email, nombre, rol, tipo, telefono, cuit, redirectTo });
+    await edgeUsers('create_user', { email, nombre, rol, tipo, telefono: tel.value, cuit, redirectTo });
 
         await registrarLog('crear_usuario', `Creó usuario ${email} con rol ${rol}`);
     showToast(`✓ Usuario creado y magic link enviado a ${email}`);
@@ -4372,6 +4402,40 @@ function toggleNuevoContacto() {
   if (f.style.display === 'block') {
     document.getElementById('hc-descripcion').value = '';
   }
+}
+
+function escHtmlLead(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadDatosLead(leadId) {
+  const box = document.getElementById('lead-datos');
+  if (!box) return;
+  const l = allLeads.find(x => x.id === leadId) || {};
+  box.innerHTML = '';
+  const { data: d, error } = await sbAdmin.from('leads_datos').select('*').eq('lead_id', leadId).maybeSingle();
+  if (currentLeadId !== leadId) return; // se cerró o cambió de lead mientras cargaba
+  const titulo = '<div class="detail-key" style="margin-bottom:8px;font-weight:700">Datos completados por el cliente</div>';
+  if (error) { box.innerHTML = titulo + '<div class="detail-val" style="color:var(--text3)">No se pudieron cargar los datos.</div>'; return; }
+  if (!d) {
+    const estado = l.datos_solicitados_at
+      ? 'Pendiente · se pidieron por mail el ' + formatFecha(l.datos_solicitados_at.split('T')[0])
+      : 'Todavía no se pidieron.';
+    box.innerHTML = titulo + '<div class="detail-val" style="color:var(--text3)">' + estado + '</div>';
+    return;
+  }
+  const filas = [
+    ['Tipo', d.tipo_persona === 'juridica' ? 'Empresa' : 'Persona física'],
+    [d.tipo_persona === 'juridica' ? 'CUIT' : 'DNI', d.documento],
+    ['Actividad', d.actividad], ['Ingresos / facturación 12m', d.ingresos],
+    ['Modelo confirmado', d.modelo_confirmado], ['Plazo', d.plazo_meses || '—'],
+    ['Anticipo', d.anticipo || '—'], ['Localidad', d.localidad],
+    ['Horario para llamar', d.horario_contacto || 'Indistinto'],
+  ];
+  box.innerHTML = titulo +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Completado el ' + formatFecha((d.updated_at || d.created_at).split('T')[0]) + '</div>' +
+    '<div class="detail-grid">' + filas.map(([k, v]) =>
+      '<div><div class="detail-key">' + escHtmlLead(k) + '</div><div class="detail-val">' + escHtmlLead(v) + '</div></div>').join('') + '</div>';
 }
 
 async function loadHistorialLead(leadId) {
@@ -4736,6 +4800,12 @@ async function convertirLeadACliente() {
   btn.disabled = true;
   btn.textContent = 'Convirtiendo...';
 
+  // El teléfono del lead es texto libre: lo normalizamos; si no es válido se crea el cliente sin teléfono
+  const telLead = normalizarTelefonoAR(lead.telefono);
+  if (!telLead.ok || !telLead.value) {
+    showToast('⚠️ El teléfono del lead no tiene un formato válido: el cliente se crea sin teléfono. Cargalo después con el formato +54 9 11 1234-5678.');
+  }
+
   try {
     // Verificar si ya existe como usuario
     const { data: usuarioExistente } = await sbAdmin.from('usuarios')
@@ -4753,7 +4823,7 @@ async function convertirLeadACliente() {
         nombre: lead.nombre,
         rol: 'lessee',
         tipo: 'fisica',
-        telefono: lead.telefono || null,
+        telefono: (telLead.ok && telLead.value) ? telLead.value : null,
         redirectTo: 'https://portal.phenixleasing.com'
       });
     }
