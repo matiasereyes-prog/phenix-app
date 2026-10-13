@@ -402,6 +402,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="referido">Referido</option>
           <option value="directo">Directo</option>
         </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer"><input type="checkbox" id="filter-lead-dup" onchange="filterLeads()"/> Solo duplicados</label>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
@@ -1143,6 +1144,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button onclick="closeModal('modal-detalle-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
     </div>
     <div class="detail-grid" id="lead-grid"></div>
+    <div id="lead-dups" style="margin-top:16px"></div>
     <div id="lead-datos" style="margin-top:16px"></div>
     <div class="form-group" style="margin-top:16px">
       <label class="form-label">Cambiar estado</label>
@@ -2051,6 +2053,7 @@ let allLeasings = [];
 let allLeads = [];
 let currentLeaseId = null;
 let currentLeadId = null;
+let leadsDuplicados = {};
 
 // ══════════════════════════════════════════════════════════════════
 // AUTH
@@ -2394,6 +2397,7 @@ async function irALeadsNuevos() {
   document.getElementById('search-leads').value = '';
   document.getElementById('filter-lead-estado').value = 'nuevo';
   document.getElementById('filter-lead-canal').value = '';
+  document.getElementById('filter-lead-dup').checked = false;
   filterLeads();
 }
 
@@ -3863,7 +3867,27 @@ async function crearCliente() {
 async function loadLeads() {
   const { data } = await sbAdmin.from('leads').select('*').order('created_at',{ascending:false});
   allLeads = data || [];
+  calcularDuplicadosLeads();
   renderLeadsTable(allLeads);
+}
+
+// Duplicados: mismo email, o mismo teléfono (últimos 10 dígitos)
+function _claveEmailLead(l) { return (l.email || '').trim().toLowerCase(); }
+function _clavePhoneLead(l) { const d = String(l.telefono || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : ''; }
+function calcularDuplicadosLeads() {
+  const porEmail = {}, porTel = {};
+  allLeads.forEach(l => {
+    const e = _claveEmailLead(l), t = _clavePhoneLead(l);
+    if (e) (porEmail[e] = porEmail[e] || []).push(l.id);
+    if (t) (porTel[t] = porTel[t] || []).push(l.id);
+  });
+  leadsDuplicados = {};
+  allLeads.forEach(l => {
+    const e = _claveEmailLead(l), t = _clavePhoneLead(l);
+    const otros = new Set([...(e ? porEmail[e] : []), ...(t ? porTel[t] : [])]);
+    otros.delete(l.id);
+    if (otros.size) leadsDuplicados[l.id] = [...otros];
+  });
 }
 
 function filterLeads() {
@@ -3874,7 +3898,8 @@ function filterLeads() {
     const matchQ = !q || l.nombre.toLowerCase().includes(q) || l.email.toLowerCase().includes(q);
     const matchEstado = !estado || l.estado === estado;
     const matchCanal = !canal || (l.canal || 'landing') === canal;
-    return matchQ && matchEstado && matchCanal;
+    const matchDup = !document.getElementById('filter-lead-dup').checked || !!leadsDuplicados[l.id];
+    return matchQ && matchEstado && matchCanal && matchDup;
   });
   renderLeadsTable(filtered);
 }
@@ -3883,7 +3908,7 @@ function renderLeadsTable(data) {
   const tbody = document.getElementById('tbody-leads');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📬</div><div class="empty-text">Sin leads registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(l => '<tr onclick="abrirDetalleLead(\'' + l.id + '\')">' +
-    '<td class="bold">' + l.nombre + '</td>' +
+    '<td class="bold">' + l.nombre + (leadsDuplicados[l.id] ? ' <span title="Hay otro lead con el mismo email o teléfono" style="display:inline-block;font-size:10px;font-weight:700;background:#fff4e5;color:#b45309;border-radius:6px;padding:2px 6px;margin-left:4px">DUPLICADO</span>' : '') + '</td>' +
     '<td class="mono" style="font-size:12px">' + l.email + '</td>' +
     '<td>' + (l.telefono||'—') + '</td>' +
     '<td>' + (l.auto_interes||'—') + '</td>' +
@@ -3916,6 +3941,7 @@ function abrirDetalleLead(id) {
   ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
   openModal('modal-detalle-lead');
   loadHistorialLead(currentLeadId);
+  mostrarDuplicadosLead(currentLeadId);
   loadDatosLead(currentLeadId);
 }
 
@@ -4414,6 +4440,20 @@ function toggleNuevoContacto() {
   if (f.style.display === 'block') {
     document.getElementById('hc-descripcion').value = '';
   }
+}
+
+function mostrarDuplicadosLead(id) {
+  const box = document.getElementById('lead-dups');
+  if (!box) return;
+  const ids = leadsDuplicados[id] || [];
+  if (!ids.length) { box.innerHTML = ''; return; }
+  const filas = ids.map(oid => allLeads.find(x => x.id === oid)).filter(Boolean)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .map(o => '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #f3dcc0">' +
+      '<span style="font-size:13px">' + escHtmlLead(o.nombre) + ' · ' + escHtmlLead(o.canal || 'landing') + ' · ' + escHtmlLead(o.estado) + ' · ' + formatFecha((o.created_at || '').split('T')[0]) + '</span>' +
+      '<button class="btn btn-outline btn-sm" onclick="abrirDetalleLead(\'' + o.id + '\')">Ver →</button></div>').join('');
+  box.innerHTML = '<div style="background:#fff4e5;border:1px solid #f3dcc0;border-radius:10px;padding:10px 14px">' +
+    '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:4px">⚠ Posible lead duplicado (mismo email o teléfono)</div>' + filas + '</div>';
 }
 
 function escHtmlLead(v) {
