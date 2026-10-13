@@ -393,6 +393,15 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="convertido">Convertido</option>
           <option value="rechazado">Rechazado</option>
         </select>
+        <select class="filter-select" id="filter-lead-canal" onchange="filterLeads()">
+          <option value="">Todos los canales</option>
+          <option value="landing">Landing</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="instagram">Instagram</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="referido">Referido</option>
+          <option value="directo">Directo</option>
+        </select>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
@@ -2384,6 +2393,7 @@ async function irALeadsNuevos() {
   await loadLeads();
   document.getElementById('search-leads').value = '';
   document.getElementById('filter-lead-estado').value = 'nuevo';
+  document.getElementById('filter-lead-canal').value = '';
   filterLeads();
 }
 
@@ -3859,10 +3869,12 @@ async function loadLeads() {
 function filterLeads() {
   const q = document.getElementById('search-leads').value.toLowerCase();
   const estado = document.getElementById('filter-lead-estado').value;
+  const canal = document.getElementById('filter-lead-canal').value;
   const filtered = allLeads.filter(l => {
     const matchQ = !q || l.nombre.toLowerCase().includes(q) || l.email.toLowerCase().includes(q);
     const matchEstado = !estado || l.estado === estado;
-    return matchQ && matchEstado;
+    const matchCanal = !canal || (l.canal || 'landing') === canal;
+    return matchQ && matchEstado && matchCanal;
   });
   renderLeadsTable(filtered);
 }
