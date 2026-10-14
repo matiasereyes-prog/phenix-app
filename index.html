@@ -758,12 +758,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         </div>
         <div class="form-group">
           <label class="form-label">Garantía</label>
-          <select class="form-input" id="cz-garantia" onchange="calcularCuotaCotizador()">
-            <option value="10">10%</option>
-            <option value="25">25%</option>
-            <option value="50">50%</option>
-            <option value="100">100%</option>
-          </select>
+          <input class="form-input" type="number" id="cz-garantia" min="10" max="100" step="any" value="10" placeholder="10" oninput="calcularCuotaCotizador()"/>
+          <div id="cz-garantia-hint" style="font-size:11px;color:var(--text3);margin-top:4px">Entre 10% y 100%. Se interpola entre los tramos de la matriz.</div>
         </div>
       </div>
 
@@ -776,10 +772,14 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <label class="form-label">Riesgo crediticio (Nosis)</label>
         <div style="display:flex;gap:8px;margin-top:6px">
           <input class="form-input" type="text" id="cz-cuit" placeholder="CUIT del cliente" style="flex:1" oninput="czCuitEditado()"/>
-          <button class="btn btn-outline btn-sm" onclick="consultarNosis()" style="white-space:nowrap">Consultar Nosis</button>
           <button class="btn btn-outline btn-sm" id="cz-bcra-btn" onclick="consultarBcra()" style="white-space:nowrap">Consultar BCRA</button>
         </div>
-        <div id="cz-nosis-result" style="font-size:13px;margin-top:10px;color:var(--text2)"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <label class="form-label" style="margin:0" for="cz-score">Score Nosis</label>
+          <input class="form-input" type="number" id="cz-score" min="0" max="999" step="1" placeholder="Ej: 720" style="width:130px" oninput="czScoreManual()"/>
+          <span style="font-size:11px;color:var(--text3)">Carga manual hasta integrar Nosis</span>
+        </div>
+        <div id="cz-nosis-result" style="font-size:13px;margin-top:8px;color:var(--text2)"></div>
         <div id="cz-bcra-hint" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
         <div style="margin-top:12px;padding:12px;border-radius:8px;background:var(--bg)">
           <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">¿No tenés el CUIT? Calculalo desde el DNI</div>
@@ -3518,6 +3518,31 @@ async function consultarBcraDesdeLead() {
   }
 }
 
+// Score Nosis cargado a mano (hasta integrar la consulta real): define la categoría de riesgo y la columna de tasa.
+function czScoreManual() {
+  const result = document.getElementById('cz-nosis-result');
+  const raw = document.getElementById('cz-score').value.trim();
+  if (raw === '') {
+    czUltimoRiesgo = null;
+    result.style.color = 'var(--text2)';
+    result.textContent = '';
+  } else {
+    const score = Number(raw);
+    if (!Number.isInteger(score) || score < 0 || score > 999) {
+      czUltimoRiesgo = null;
+      result.style.color = 'var(--red)';
+      result.textContent = 'Ingresá un score entero entre 0 y 999.';
+    } else {
+      const cat = czCategoriaPorScore(score);
+      czUltimoRiesgo = { categoria: cat.key, score, manual: true };
+      result.style.color = cat.key === 'no_califica' ? 'var(--red)' : 'var(--text2)';
+      result.textContent = 'Score: ' + score + ' — Categoría: ' + cat.label + (cat.key === 'no_califica' ? ' (no cotiza)' : '') + ' · carga manual';
+    }
+  }
+  calcularCuotaCotizador();
+}
+
+// (Reservada para la integración real con Nosis; hoy el score se carga a mano con czScoreManual.)
 async function consultarNosis() {
   const cuit = document.getElementById('cz-cuit').value.trim();
   const result = document.getElementById('cz-nosis-result');
@@ -3530,7 +3555,7 @@ async function consultarNosis() {
     // MOCK — reemplazar por llamada real, ej:
     // const { data, error } = await sb.functions.invoke('consultar-nosis', { body: { cuit } });
     await new Promise(res => setTimeout(res, 600));
-    const scoreSimulado = Math.floor(400 + Math.random() * 600);
+    const scoreSimulado = Math.floor(400 + Math.random() * 600); // SOLO MOCK: ya no se invoca desde la pantalla
     const cat = czCategoriaPorScore(scoreSimulado);
     czUltimoRiesgo = { categoria: cat.key, score: scoreSimulado };
     result.style.color = cat.key === 'no_califica' ? 'var(--red)' : 'var(--text2)';
@@ -3543,9 +3568,24 @@ async function consultarNosis() {
   calcularCuotaCotizador();
 }
 
+// Tasa para una garantía tipeada: si coincide con un tramo de la matriz se usa tal cual;
+// si cae entre dos tramos, se interpola linealmente entre los vecinos (misma categoría de riesgo).
+function czTasaInterpolada(garantia, categoria) {
+  const tramos = CZ_GARANTIAS.slice().sort((a, b) => a - b);
+  const exacto = czMatriz[czKey(garantia, categoria)];
+  if (tramos.includes(garantia)) return exacto === undefined ? null : { tasa: exacto, interpolada: false };
+  let g1 = null, g2 = null;
+  for (const g of tramos) { if (g < garantia) g1 = g; if (g > garantia && g2 === null) g2 = g; }
+  if (g1 === null || g2 === null) return null;
+  const t1 = czMatriz[czKey(g1, categoria)], t2 = czMatriz[czKey(g2, categoria)];
+  if (t1 === undefined || t2 === undefined) return null;
+  const tasa = t1 + (t2 - t1) * (garantia - g1) / (g2 - g1);
+  return { tasa, interpolada: true, g1, g2, t1, t2 };
+}
+
 function calcularCuotaCotizador() {
   const valorAuto = parseFloat(document.getElementById('cz-valor')?.value);
-  const garantiaPct = parseInt(document.getElementById('cz-garantia')?.value);
+  const garantiaPct = parseFloat(document.getElementById('cz-garantia')?.value);
   const plazoMeses = parseInt(document.getElementById('cz-plazo')?.value);
   const resultado = document.getElementById('cz-resultado');
   if (!resultado) return;
@@ -3564,7 +3604,23 @@ function calcularCuotaCotizador() {
     return;
   }
 
-  const tasaAnual = czMatriz[czKey(garantiaPct, czUltimoRiesgo.categoria)];
+  const hint = document.getElementById('cz-garantia-hint');
+  const gMin = Math.min(...CZ_GARANTIAS), gMax = Math.max(...CZ_GARANTIAS);
+  if (garantiaPct < gMin || garantiaPct > gMax) {
+    resultado.style.display = 'block';
+    document.getElementById('cz-cuota').textContent = 'Garantía fuera de rango';
+    document.getElementById('cz-cuota-sin-iva').textContent = '—';
+    document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-tasa').textContent = '—';
+    document.getElementById('cz-garantia-monto').textContent = '—';
+    if (hint) hint.textContent = 'La garantía debe estar entre ' + gMin + '% y ' + gMax + '%.';
+    return;
+  }
+  const tasaInfo = czTasaInterpolada(garantiaPct, czUltimoRiesgo.categoria);
+  const tasaAnual = tasaInfo ? tasaInfo.tasa : undefined;
+  if (hint) hint.textContent = tasaInfo && tasaInfo.interpolada
+    ? 'Tasa interpolada entre ' + tasaInfo.g1 + '% (' + tasaInfo.t1 + '%) y ' + tasaInfo.g2 + '% (' + tasaInfo.t2 + '%).'
+    : 'Entre ' + gMin + '% y ' + gMax + '%. Se interpola entre los tramos de la matriz.';
   if (tasaAnual === undefined) {
     resultado.style.display = 'block';
     document.getElementById('cz-cuota').textContent = 'Tasa no configurada';
@@ -3590,7 +3646,7 @@ function calcularCuotaCotizador() {
   document.getElementById('cz-cuota').textContent = 'USD ' + cuotaConIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-cuota-sin-iva').textContent = 'USD ' + cuotaSinIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-capital').textContent = 'USD ' + capitalFinanciado.toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  document.getElementById('cz-tasa').textContent = tasaAnual + '%';
+  document.getElementById('cz-tasa').textContent = (Math.round(tasaAnual * 100) / 100) + '%';
   document.getElementById('cz-garantia-monto').textContent = 'USD ' + depositoGarantia.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 }
 
