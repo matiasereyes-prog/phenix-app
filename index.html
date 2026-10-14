@@ -181,6 +181,46 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   .topbar-nav{display:none}
   .main{padding:16px 16px 60px}
 }
+
+/* ── Informe BCRA (cotizador) ── */
+.bc-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-top:16px}
+.bc-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.bc-head h2{margin:0 0 4px;font-size:20px;font-weight:800}
+.bc-meta{color:#6b7280;font-size:12px}
+.bc-sem{margin-left:auto;padding:8px 16px;border-radius:999px;font-weight:800;font-size:13px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.bc-sem::before{content:'';width:11px;height:11px;border-radius:50%;background:currentColor}
+.bc-sem-verde{background:#dcfce7;color:#15803d}.bc-sem-amarillo{background:#fef9c3;color:#a16207}
+.bc-sem-rojo{background:#fee2e2;color:#b91c1c}.bc-sem-sin_datos{background:#f3f4f6;color:#6b7280}
+.bc-alertas{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.bc-alertas li{padding:8px 12px;border-radius:8px;background:#f3f4f6;font-size:13px}
+.bc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px}
+.bc-kpi{border:1px solid #e5e7eb;border-radius:10px;padding:14px}
+.bc-kpi .l{font-size:11px;color:#6b7280;font-weight:600}.bc-kpi .v{font-size:20px;font-weight:800;margin-top:4px}.bc-kpi .s{font-size:11px;color:#6b7280;margin-top:2px}
+.bc-h3{font-size:13px;font-weight:700;margin:20px 0 10px}
+.bc-table-wrap{overflow-x:auto}
+.bc-table{width:100%;border-collapse:collapse;font-size:13px}
+.bc-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;font-weight:600;padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+.bc-table td{padding:9px 10px;border-bottom:1px solid #eef0f2;vertical-align:top}
+.bc-table td.num{text-align:right;white-space:nowrap}
+.bc-sit{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:6px;color:#fff;font-weight:700;font-size:12px}
+.bc-tag{display:inline-block;font-size:11px;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#b91c1c;margin:2px 4px 0 0}
+.bc-tag.g{background:#f3f4f6;color:#6b7280}
+.bc-evol{display:flex;align-items:flex-end;gap:4px;height:130px;padding-top:8px}
+.bc-evol .col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.bc-evol .bar{width:100%;border-radius:3px 3px 0 0;min-height:3px}
+.bc-evol .m{font-size:9px;color:#6b7280;margin-top:4px;white-space:nowrap}
+.bc-leyenda{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#6b7280;margin-top:10px}
+.bc-leyenda span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.bc-pie{font-size:11px;color:#6b7280;line-height:1.5;margin-top:18px}
+.bc-acciones{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+@media (max-width:600px){.bc-sem{margin-left:0}.bc-evol .m{display:none}}
+@media print{
+  body *{visibility:hidden!important}
+  #cz-bcra-informe,#cz-bcra-informe *{visibility:visible!important}
+  #cz-bcra-informe{position:absolute;left:0;top:0;width:100%;border:0}
+  .bc-acciones{display:none!important}
+  .bc-sit,.bc-evol .bar,.bc-sem,.bc-leyenda span::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -735,10 +775,13 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div style="border-top:1px solid #eee;margin:20px 0;padding-top:16px">
         <label class="form-label">Riesgo crediticio (Nosis)</label>
         <div style="display:flex;gap:8px;margin-top:6px">
-          <input class="form-input" type="text" id="cz-cuit" placeholder="CUIT del cliente" style="flex:1"/>
+          <input class="form-input" type="text" id="cz-cuit" placeholder="CUIT del cliente" style="flex:1" oninput="czCuitEditado()"/>
           <button class="btn btn-outline btn-sm" onclick="consultarNosis()" style="white-space:nowrap">Consultar Nosis</button>
+          <button class="btn btn-outline btn-sm" id="cz-bcra-btn" onclick="consultarBcra()" style="white-space:nowrap">Consultar BCRA</button>
         </div>
         <div id="cz-nosis-result" style="font-size:13px;margin-top:10px;color:var(--text2)"></div>
+        <div id="cz-bcra-hint" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
+        <div id="cz-bcra-error" style="display:none;font-size:13px;margin-top:10px;padding:10px 12px;border-radius:8px;background:#fee2e2;color:#b91c1c"></div>
       </div>
 
       <div id="cz-resultado" style="display:none;margin-top:20px;padding:20px;border-radius:var(--radius-sm);background:var(--bg)">
@@ -753,6 +796,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <div style="font-size:11px;color:var(--text3);margin-top:10px">Estimación no vinculante. Sujeta a aprobación crediticia final.</div>
       </div>
     </div>
+
+    <div id="cz-bcra-informe" style="display:none;max-width:900px"></div>
 
     <div id="cotizador-admin-matrix" class="card" style="padding:24px;max-width:900px;margin-top:20px;display:none">
       <div style="font-family:var(--display);font-size:16px;font-weight:700;margin-bottom:4px">Matriz de tasas anuales (%)</div>
@@ -1150,6 +1195,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button onclick="closeModal('modal-detalle-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
     </div>
     <div class="detail-grid" id="lead-grid"></div>
+    <div style="margin-top:14px"><button class="btn btn-outline btn-sm" onclick="consultarBcraDesdeLead()">Consultar BCRA</button></div>
     <div id="lead-dups" style="margin-top:16px"></div>
     <div id="lead-datos" style="margin-top:16px"></div>
     <div class="form-group" style="margin-top:16px">
@@ -3291,6 +3337,141 @@ function czCategoriaPorScore(score) {
 
 // TODO: reemplazar por la consulta real a Nosis (vía Supabase Edge Function,
 // para no exponer credenciales de Nosis en el frontend). Por ahora, mock.
+
+// ═══════════════════════════════════════════════════════════
+// INFORME BCRA — Central de Deudores (dentro del cotizador)
+// ═══════════════════════════════════════════════════════════
+let czBcraLeadId = null;
+let czBcraUltimoCuit = null;
+const bcEsc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const bcDig = v => String(v || '').replace(/\D/g, '');
+const bcFmtCuit = c => { c = bcDig(c); return c.length === 11 ? c.slice(0,2) + '-' + c.slice(2,10) + '-' + c.slice(10) : c; };
+const bcPesos = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+const bcMiles = m => bcPesos((m || 0) * 1000);
+const bcPeriodo = p => p ? ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(String(p).slice(4,6)) - 1] + ' ' + String(p).slice(2,4) : '—';
+const bcFecha = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? Number(m[3]) + '/' + Number(m[2]) + '/' + m[1] : '—'; };
+const bcFechaHora = f => f ? new Date(f).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+const bcColorSit = s => ({0:'#d1d5db',1:'#16a34a',2:'#ca8a04',3:'#ea580c',4:'#dc2626',5:'#7f1d1d',6:'#7f1d1d'}[Math.min(Math.max(s || 0, 0), 6)]);
+const BC_SEM_TXT = { verde: 'VERDE', amarillo: 'AMARILLO', rojo: 'ROJO', sin_datos: 'SIN REGISTROS' };
+
+function czCuitEditado() {
+  // si el usuario escribe otro CUIT a mano, ya no es la consulta del lead
+  czBcraLeadId = null;
+  const h = document.getElementById('cz-bcra-hint'); if (h) h.textContent = '';
+  const c = document.getElementById('cz-cuit');
+  if (c) { const pos = c.selectionStart; const antes = c.value.length; c.value = bcDig(c.value).length === 11 ? bcFmtCuit(c.value) : c.value; if (c.value.length !== antes) c.setSelectionRange(c.value.length, c.value.length); }
+}
+
+async function consultarBcra(opts) {
+  opts = opts || {};
+  const err = document.getElementById('cz-bcra-error');
+  const out = document.getElementById('cz-bcra-informe');
+  const btn = document.getElementById('cz-bcra-btn');
+  err.style.display = 'none';
+  const cuit = bcDig(opts.cuit != null ? opts.cuit : document.getElementById('cz-cuit').value);
+  if (cuit.length !== 11 && !(czBcraLeadId && !cuit)) {
+    err.textContent = 'Ingresá un CUIT/CUIL de 11 dígitos (el BCRA no consulta por DNI).';
+    err.style.display = 'block';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Consultando…';
+  out.style.display = 'block';
+  out.innerHTML = '<div class="bc-card" style="color:#6b7280">Consultando al BCRA…</div>';
+  try {
+    const body = { forzar: !!opts.forzar };
+    if (cuit) body.cuit = cuit;
+    if (czBcraLeadId) body.lead_id = czBcraLeadId;
+    const { data, error } = await sb.functions.invoke('informe-bcra', { body });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context.json(); msg = j.error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    czBcraUltimoCuit = data.cuit;
+    document.getElementById('cz-cuit').value = bcFmtCuit(data.cuit);
+    renderInformeBcra(data);
+  } catch (e) {
+    out.style.display = 'none'; out.innerHTML = '';
+    err.textContent = e.message || 'Error al consultar el BCRA';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Consultar BCRA';
+  }
+}
+
+function renderInformeBcra(d) {
+  const ents = d.entidades || [], evol = d.evolucion || [];
+  const ch = d.cheques || { total: 0, impagos: 0, detalle: [] };
+  const maxDeuda = Math.max(1, ...evol.map(p => p.deuda_miles));
+
+  const tablaEnt = ents.length ? '<div class="bc-table-wrap"><table class="bc-table"><thead><tr><th>Entidad</th><th>Situación</th><th class="num">Deuda</th><th class="num">Días atraso</th><th>Observaciones</th></tr></thead><tbody>' +
+    ents.slice().sort((a, b) => b.situacion - a.situacion || b.monto_miles - a.monto_miles).map(e =>
+      '<tr><td>' + bcEsc(e.entidad) + '</td>' +
+      '<td><span class="bc-sit" style="background:' + bcColorSit(e.situacion) + '">' + e.situacion + '</span> <span class="bc-meta">' + bcEsc(e.situacion_desc) + '</span></td>' +
+      '<td class="num">' + bcMiles(e.monto_miles) + '</td><td class="num">' + (e.dias_atraso != null ? e.dias_atraso : '—') + '</td>' +
+      '<td>' + ([e.refinanciaciones && '<span class="bc-tag">Refinanciada</span>', e.proceso_judicial && '<span class="bc-tag">Proceso judicial</span>', e.situacion_juridica && '<span class="bc-tag">Situación jurídica</span>', e.en_revision && '<span class="bc-tag g">En revisión</span>'].filter(Boolean).join('') || '<span class="bc-meta">—</span>') + '</td></tr>').join('') +
+    '</tbody></table></div>' : '<div class="bc-meta">No registra deudas en el último período informado.</div>';
+
+  const grafico = evol.length ? '<div class="bc-evol">' + evol.map(p =>
+    '<div class="col" title="' + bcPeriodo(p.periodo) + ' · situación ' + p.peor_situacion + ' · ' + bcMiles(p.deuda_miles) + ' · ' + p.entidades + ' entidad(es)">' +
+    '<div class="bar" style="height:' + Math.max(2, (p.deuda_miles / maxDeuda) * 100) + '%;background:' + bcColorSit(p.peor_situacion) + '"></div><div class="m">' + bcPeriodo(p.periodo) + '</div></div>').join('') +
+    '</div><div class="bc-leyenda"><span style="--c:#16a34a">Sit. 1 Normal</span><span style="--c:#ca8a04">Sit. 2</span><span style="--c:#ea580c">Sit. 3</span><span style="--c:#dc2626">Sit. 4</span><span style="--c:#7f1d1d">Sit. 5</span><span style="--c:#d1d5db">Sin deuda</span></div>' +
+    '<div class="bc-meta" style="margin-top:6px">Altura = deuda total del mes · Color = peor situación del mes.</div>' : '<div class="bc-meta">Sin historial en los últimos 24 meses.</div>';
+
+  const tablaCh = ch.detalle.length ? '<div class="bc-table-wrap"><table class="bc-table"><thead><tr><th>Fecha rechazo</th><th>Entidad</th><th>Causal</th><th class="num">Nº cheque</th><th class="num">Monto</th><th>Pagado</th><th>Multa</th></tr></thead><tbody>' +
+    ch.detalle.slice().sort((a, b) => String(b.fecha_rechazo).localeCompare(String(a.fecha_rechazo))).map(c =>
+      '<tr><td>' + bcFecha(c.fecha_rechazo) + '</td><td>' + bcEsc(c.entidad) + '</td><td>' + bcEsc(c.causal) + '</td><td class="num">' + bcEsc(c.nro) + '</td><td class="num">' + bcPesos(c.monto) + '</td>' +
+      '<td>' + (c.fecha_pago ? bcFecha(c.fecha_pago) : '<span class="bc-tag">Impago</span>') + '</td><td>' + bcEsc(c.estado_multa || '—') + '</td></tr>').join('') +
+    '</tbody></table></div>' : '<div class="bc-meta">No registra cheques rechazados.</div>';
+
+  const alertas = (d.alertas && d.alertas.length) ? '<ul class="bc-alertas">' + d.alertas.map(a => '<li>' + bcEsc(a) + '</li>').join('') + '</ul>'
+    : (d.semaforo === 'verde' ? '<ul class="bc-alertas"><li>Situación 1 en todas las entidades, sin cheques rechazados ni antecedentes en 24 meses.</li></ul>' : '');
+
+  document.getElementById('cz-bcra-informe').innerHTML =
+    '<div class="bc-card">' +
+      '<div class="bc-head"><div><h2>' + bcEsc(d.denominacion || 'Sin denominación en BCRA') + '</h2>' +
+        '<div class="bc-meta">CUIT ' + bcFmtCuit(d.cuit) + ' · Período informado: ' + bcPeriodo(d.periodo_actual) + ' · Consultado ' + bcFechaHora(d.consultado_at) + (d.desde_cache ? ' (consulta reciente reutilizada)' : '') + '</div></div>' +
+        '<div class="bc-sem bc-sem-' + bcEsc(d.semaforo) + '">' + (BC_SEM_TXT[d.semaforo] || bcEsc(d.semaforo)) + '</div></div>' +
+      alertas +
+      '<div class="bc-kpis">' +
+        '<div class="bc-kpi"><div class="l">Deuda total</div><div class="v">' + bcMiles(d.deuda_total_miles) + '</div><div class="s">' + d.cantidad_entidades + ' entidad(es)</div></div>' +
+        '<div class="bc-kpi"><div class="l">Peor situación actual</div><div class="v">' + (d.peor_situacion_actual != null ? d.peor_situacion_actual : '—') + '</div><div class="s">1 = normal · 5 = irrecuperable</div></div>' +
+        '<div class="bc-kpi"><div class="l">Peor situación 24 meses</div><div class="v">' + (d.peor_situacion_24m != null ? d.peor_situacion_24m : '—') + '</div><div class="s">' + d.meses_sit_3_o_mas + ' mes(es) en situación 3+</div></div>' +
+        '<div class="bc-kpi"><div class="l">Cheques rechazados</div><div class="v">' + ch.total + '</div><div class="s">' + ch.impagos + ' impago(s)</div></div>' +
+      '</div>' +
+      '<div class="bc-h3">Situación actual por entidad</div>' + tablaEnt +
+      '<div class="bc-h3">Evolución últimos 24 meses</div>' + grafico +
+      '<div class="bc-h3">Cheques rechazados</div>' + tablaCh +
+      '<div class="bc-acciones"><button class="btn btn-outline btn-sm" onclick="consultarBcra({ cuit: czBcraUltimoCuit, forzar: true })">Actualizar</button><button class="btn btn-outline btn-sm" onclick="window.print()">Imprimir / PDF</button></div>' +
+      '<div class="bc-pie">Fuente: BCRA · Central de Deudores del Sistema Financiero (API pública). Montos informados en miles de pesos y expresados acá en pesos. La información se actualiza mensualmente y puede tener un desfase de 1 a 2 meses. Uso interno de Phenix Leasing S.A.; dato personal alcanzado por la Ley 25.326.</div>' +
+    '</div>';
+  document.getElementById('cz-bcra-informe').style.display = 'block';
+}
+
+// Desde la ficha del lead: abre el cotizador con el CUIT que el cliente cargó en el formulario
+async function consultarBcraDesdeLead() {
+  const leadId = currentLeadId;
+  if (!leadId) return;
+  const { data: d } = await sbAdmin.from('leads_datos').select('documento').eq('lead_id', leadId).maybeSingle();
+  const doc = bcDig(d && d.documento);
+  closeModal('modal-detalle-lead');
+  showView('cotizador');
+  czBcraLeadId = leadId;
+  document.getElementById('cz-bcra-hint').textContent = 'La consulta queda registrada en el historial del lead.';
+  document.getElementById('cz-bcra-error').style.display = 'none';
+  document.getElementById('cz-bcra-informe').style.display = 'none';
+  if (doc.length === 11) {
+    document.getElementById('cz-cuit').value = bcFmtCuit(doc);
+    consultarBcra({ cuit: doc });
+  } else {
+    document.getElementById('cz-cuit').value = '';
+    document.getElementById('cz-cuit').focus();
+    const e = document.getElementById('cz-bcra-error');
+    e.textContent = doc ? 'El cliente cargó un DNI (' + doc + '), y el BCRA se consulta por CUIT/CUIL. Ingresá el CUIT.' : 'El cliente todavía no completó el formulario. Ingresá el CUIT a mano.';
+    e.style.display = 'block';
+  }
+}
+
 async function consultarNosis() {
   const cuit = document.getElementById('cz-cuit').value.trim();
   const result = document.getElementById('cz-nosis-result');
