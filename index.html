@@ -3437,13 +3437,14 @@ function renderInformeBcra(d) {
       '<td>' + (c.fecha_pago ? bcFecha(c.fecha_pago) : '<span class="bc-tag">Impago</span>') + '</td><td>' + bcEsc(c.estado_multa || '—') + '</td></tr>').join('') +
     '</tbody></table></div>' : '<div class="bc-meta">No registra cheques rechazados.</div>';
 
-  const alertas = (d.alertas && d.alertas.length) ? '<ul class="bc-alertas">' + d.alertas.map(a => '<li>' + bcEsc(a) + '</li>').join('') + '</ul>'
-    : (d.semaforo === 'verde' ? '<ul class="bc-alertas"><li>Situación 1 en todas las entidades, sin cheques rechazados ni antecedentes en 24 meses.</li></ul>' : '');
+  const avisoNombre = d.denominacion ? '' : '<div class="bc-meta" style="margin-top:8px">El BCRA informa el nombre solo cuando hay deuda vigente en el último período. Verificá la identidad con otro dato (razón social, DNI).</div>';
+  const alertas = avisoNombre + ((d.alertas && d.alertas.length) ? '<ul class="bc-alertas">' + d.alertas.map(a => '<li>' + bcEsc(a) + '</li>').join('') + '</ul>'
+    : (d.semaforo === 'verde' ? '<ul class="bc-alertas"><li>Situación 1 en todas las entidades, sin cheques rechazados ni antecedentes en 24 meses.</li></ul>' : ''));
 
   document.getElementById('cz-bcra-informe').innerHTML =
     '<div class="bc-card">' +
-      '<div class="bc-head"><div><h2>' + bcEsc(d.denominacion || 'Sin denominación en BCRA') + '</h2>' +
-        '<div class="bc-meta">CUIT ' + bcFmtCuit(d.cuit) + ' · Período informado: ' + bcPeriodo(d.periodo_actual) + ' · Consultado ' + bcFechaHora(d.consultado_at) + (d.desde_cache ? ' (consulta reciente reutilizada)' : '') + '</div></div>' +
+      '<div class="bc-head"><div><h2>' + bcEsc(d.denominacion || 'Nombre no informado por el BCRA') + '</h2>' +
+        '<div class="bc-meta">CUIT ' + bcFmtCuit(d.cuit) + ' · Período informado: ' + bcPeriodo(d.periodo_actual || (evol.length ? evol[evol.length - 1].periodo : null)) + ' · Consultado ' + bcFechaHora(d.consultado_at) + (d.desde_cache ? ' (consulta reciente reutilizada)' : '') + '</div></div>' +
         '<div class="bc-sem bc-sem-' + bcEsc(d.semaforo) + '">' + (BC_SEM_TXT[d.semaforo] || bcEsc(d.semaforo)) + '</div></div>' +
       alertas +
       '<div class="bc-kpis">' +
