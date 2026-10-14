@@ -402,6 +402,12 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="referido">Referido</option>
           <option value="directo">Directo</option>
         </select>
+        <select class="filter-select" id="filter-lead-form" onchange="filterLeads()">
+          <option value="">Formulario: todos</option>
+          <option value="completado">Formulario completado</option>
+          <option value="pendiente">Formulario pendiente</option>
+          <option value="sin_solicitar">Sin solicitar</option>
+        </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer"><input type="checkbox" id="filter-lead-dup" onchange="filterLeads()"/> Solo duplicados</label>
       </div>
       <div class="card">
@@ -2398,6 +2404,7 @@ async function irALeadsNuevos() {
   document.getElementById('filter-lead-estado').value = 'nuevo';
   document.getElementById('filter-lead-canal').value = '';
   document.getElementById('filter-lead-dup').checked = false;
+  document.getElementById('filter-lead-form').value = '';
   filterLeads();
 }
 
@@ -3874,6 +3881,12 @@ async function loadLeads() {
 // Duplicados: mismo email, o mismo teléfono (últimos 10 dígitos)
 function _claveEmailLead(l) { return (l.email || '').trim().toLowerCase(); }
 function _clavePhoneLead(l) { const d = String(l.telefono || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : ''; }
+function estadoFormularioLead(l) {
+  if (l.datos_completados_at) return 'completado';
+  if (l.datos_solicitados_at) return 'pendiente';
+  return 'sin_solicitar';
+}
+
 function calcularDuplicadosLeads() {
   const porEmail = {}, porTel = {};
   allLeads.forEach(l => {
@@ -3899,7 +3912,9 @@ function filterLeads() {
     const matchEstado = !estado || l.estado === estado;
     const matchCanal = !canal || (l.canal || 'landing') === canal;
     const matchDup = !document.getElementById('filter-lead-dup').checked || !!leadsDuplicados[l.id];
-    return matchQ && matchEstado && matchCanal && matchDup;
+    const form = document.getElementById('filter-lead-form').value;
+    const matchForm = !form || estadoFormularioLead(l) === form;
+    return matchQ && matchEstado && matchCanal && matchDup && matchForm;
   });
   renderLeadsTable(filtered);
 }
@@ -3908,7 +3923,9 @@ function renderLeadsTable(data) {
   const tbody = document.getElementById('tbody-leads');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📬</div><div class="empty-text">Sin leads registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(l => '<tr onclick="abrirDetalleLead(\'' + l.id + '\')">' +
-    '<td class="bold">' + l.nombre + (leadsDuplicados[l.id] ? ' <span title="Hay otro lead con el mismo email o teléfono" style="display:inline-block;font-size:10px;font-weight:700;background:#fff4e5;color:#b45309;border-radius:6px;padding:2px 6px;margin-left:4px">DUPLICADO</span>' : '') + '</td>' +
+    '<td class="bold">' + l.nombre + (l.datos_completados_at
+      ? ' <span title="El cliente completó el formulario de datos" style="display:inline-block;font-size:10px;font-weight:700;background:#e7f6ec;color:#15803d;border-radius:6px;padding:2px 6px;margin-left:4px">✓ DATOS</span>'
+      : (l.datos_solicitados_at ? ' <span title="Se pidió el formulario por mail y todavía no lo completó" style="display:inline-block;font-size:10px;font-weight:700;background:#f2f2f2;color:#737373;border-radius:6px;padding:2px 6px;margin-left:4px">DATOS PENDIENTES</span>' : '')) + (leadsDuplicados[l.id] ? ' <span title="Hay otro lead con el mismo email o teléfono" style="display:inline-block;font-size:10px;font-weight:700;background:#fff4e5;color:#b45309;border-radius:6px;padding:2px 6px;margin-left:4px">DUPLICADO</span>' : '') + '</td>' +
     '<td class="mono" style="font-size:12px">' + l.email + '</td>' +
     '<td>' + (l.telefono||'—') + '</td>' +
     '<td>' + (l.auto_interes||'—') + '</td>' +
