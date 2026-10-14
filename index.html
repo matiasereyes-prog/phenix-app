@@ -781,6 +781,19 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         </div>
         <div id="cz-nosis-result" style="font-size:13px;margin-top:10px;color:var(--text2)"></div>
         <div id="cz-bcra-hint" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
+        <div style="margin-top:12px;padding:12px;border-radius:8px;background:var(--bg)">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">¿No tenés el CUIT? Calculalo desde el DNI</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input class="form-input" type="text" id="cz-dni" inputmode="numeric" placeholder="DNI" maxlength="10" style="width:130px" oninput="this.value=this.value.replace(/\D/g,'')"/>
+            <select class="form-input" id="cz-dni-sexo" style="width:150px">
+              <option value="">Sexo…</option>
+              <option value="M">Masculino</option>
+              <option value="F">Femenino</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="calcularCuitDesdeDni()" style="white-space:nowrap">Calcular CUIT</button>
+          </div>
+          <div id="cz-dni-result" style="font-size:12px;margin-top:8px;color:var(--text2)"></div>
+        </div>
         <div id="cz-bcra-error" style="display:none;font-size:13px;margin-top:10px;padding:10px 12px;border-radius:8px;background:#fee2e2;color:#b91c1c"></div>
       </div>
 
@@ -3448,6 +3461,37 @@ function renderInformeBcra(d) {
   document.getElementById('cz-bcra-informe').style.display = 'block';
 }
 
+
+// ── Calculadora CUIT/CUIL desde DNI ──
+function cuitDigitoVerificador(base10) {
+  const pesos = [5,4,3,2,7,6,5,4,3,2];
+  const suma = pesos.reduce((acc, p, i) => acc + p * Number(base10[i]), 0);
+  const r = 11 - (suma % 11);
+  return r === 11 ? 0 : r; // 10 se resuelve cambiando el prefijo (ver calcularCuil)
+}
+function calcularCuil(dni, sexo) {
+  const doc = String(dni).replace(/\D/g, '').padStart(8, '0');
+  let prefijo = sexo === 'F' ? '27' : '20';
+  let dv = cuitDigitoVerificador(prefijo + doc);
+  if (dv === 10) { // caso especial: prefijo 23 y se recalcula
+    prefijo = '23';
+    dv = cuitDigitoVerificador(prefijo + doc);
+  }
+  return prefijo + doc + dv;
+}
+function calcularCuitDesdeDni() {
+  const out = document.getElementById('cz-dni-result');
+  const dni = document.getElementById('cz-dni').value.replace(/\D/g, '');
+  const sexo = document.getElementById('cz-dni-sexo').value;
+  out.style.color = 'var(--red)';
+  if (dni.length < 6 || dni.length > 8) { out.textContent = 'Ingresá un DNI de 6 a 8 dígitos.'; return; }
+  if (!sexo) { out.textContent = 'Elegí el sexo: define el prefijo del CUIT (20 o 27).'; return; }
+  const cuit = calcularCuil(dni, sexo);
+  document.getElementById('cz-cuit').value = bcFmtCuit(cuit);
+  out.style.color = 'var(--text2)';
+  out.textContent = 'CUIT/CUIL calculado: ' + bcFmtCuit(cuit) + ' · cargado arriba. Es un cálculo: al consultar el BCRA, verificá que el nombre del informe sea el de la persona.';
+}
+
 // Desde la ficha del lead: abre el cotizador con el CUIT que el cliente cargó en el formulario
 async function consultarBcraDesdeLead() {
   const leadId = currentLeadId;
@@ -3467,7 +3511,8 @@ async function consultarBcraDesdeLead() {
     document.getElementById('cz-cuit').value = '';
     document.getElementById('cz-cuit').focus();
     const e = document.getElementById('cz-bcra-error');
-    e.textContent = doc ? 'El cliente cargó un DNI (' + doc + '), y el BCRA se consulta por CUIT/CUIL. Ingresá el CUIT.' : 'El cliente todavía no completó el formulario. Ingresá el CUIT a mano.';
+    if (doc.length >= 6 && doc.length <= 8) { document.getElementById('cz-dni').value = doc; document.getElementById('cz-dni-sexo').focus(); }
+    e.textContent = doc ? 'El cliente cargó un DNI (' + doc + '), y el BCRA se consulta por CUIT/CUIL. Elegí el sexo y calculá el CUIT acá abajo.' : 'El cliente todavía no completó el formulario. Ingresá el CUIT a mano.';
     e.style.display = 'block';
   }
 }
