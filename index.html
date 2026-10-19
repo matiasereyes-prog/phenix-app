@@ -766,14 +766,15 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button class="btn btn-outline btn-sm" id="wa-btn-cfg" onclick="waTabSet('cfg')">Configuración</button>
     </div>
 
-    <div id="wa-tab-conv"><div class="card" id="wa-conv-list" style="padding:6px 0"></div></div>
+    <div id="wa-tab-conv"><div style="margin-bottom:12px"><input class="search-input" type="text" id="wa-q-conv" placeholder="Buscar por nombre, email o teléfono…" oninput="waRenderConv()" style="max-width:360px"/></div><div class="card" id="wa-conv-list" style="padding:6px 0"></div></div>
 
-    <div id="wa-tab-cola" style="display:none"><div class="card"><div style="overflow-x:auto">
+    <div id="wa-tab-cola" style="display:none"><div style="margin-bottom:12px"><input class="search-input" type="text" id="wa-q-cola" placeholder="Buscar por nombre, email o teléfono…" oninput="waRenderCola()" style="max-width:360px"/></div><div class="card"><div style="overflow-x:auto">
       <table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Destino</th><th>Mensaje</th><th>Estado</th><th></th></tr></thead><tbody id="wa-tbody-cola"></tbody></table>
     </div></div></div>
 
     <div id="wa-tab-tel" style="display:none">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input class="search-input" type="text" id="wa-q-tel" placeholder="Buscar por nombre, email o teléfono…" oninput="waRenderTel()" style="max-width:360px"/>
         <select class="filter-select" id="wa-filtro-tel" onchange="waRenderTel()">
           <option value="">Todos los teléfonos</option><option value="invalido">Inválidos (sin WhatsApp)</option><option value="error">Con error</option><option value="pendiente">Sin validar</option><option value="valido">Válidos</option>
         </select>
@@ -4243,6 +4244,16 @@ let waAbiertos = new Set(), waFilasConv = [];
 let waCfg = null, waContactos = [], waMsgs = {}, waLeadsPorKey = {}, waColaRows = [], waReglas = [];
 function waKey(t) { const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : null; }
 function waH(v) { return escHtmlLead(v == null ? '' : v); }
+function waNormTxt(v) { return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+// ¿El teléfono k (o el texto extra) coincide con la búsqueda por nombre, email o teléfono de cualquiera de sus leads?
+function waCoincide(k, numero, qRaw, extra) {
+  const q = waNormTxt(qRaw).trim();
+  if (!q) return true;
+  const dig = q.replace(/\D/g, '');
+  if (dig.length >= 3 && ((k && k.includes(dig)) || String(numero || '').includes(dig))) return true;
+  if (extra && waNormTxt(extra).includes(q)) return true;
+  return (waLeadsPorKey[k] || []).some(l => waNormTxt(l.nombre).includes(q) || waNormTxt(l.email).includes(q) || waNormTxt(l.telefono).includes(q));
+}
 function waFecha(iso) { return iso ? new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'; }
 function waChip(txt, bg, fg, title) { return '<span ' + (title ? 'title="' + waH(title) + '" ' : '') + 'style="display:inline-block;font-size:10px;font-weight:700;background:' + bg + ';color:' + fg + ';border-radius:6px;padding:2px 6px;margin-left:4px">' + txt + '</span>'; }
 
@@ -4261,6 +4272,7 @@ async function loadWhatsApp() {
   waRenderCfg();
   await Promise.all([waCargarConv(), waCargarCola(), waCargarReglas()]);
   waRenderConv();
+  waRenderCola();
   waRenderTel();
 }
 
@@ -4288,7 +4300,7 @@ async function waCargarConv() {
   const [c, m, l] = await Promise.all([
     sbAdmin.from('wa_contactos').select('*'),
     sbAdmin.from('wa_mensajes').select('*').order('created_at', { ascending: false }).limit(500),
-    sbAdmin.from('leads').select('id,nombre,telefono,estado'),
+    sbAdmin.from('leads').select('id,nombre,email,telefono,estado'),
   ]);
   waContactos = c.data || [];
   waLeadsPorKey = {};
@@ -4307,9 +4319,15 @@ function waRenderConv() {
   });
   waContactos.filter(c => c.requiere_atencion && !waMsgs[c.telefono_key]).forEach(c => filas.push({ g: c.telefono_key, esGrupo: false, c, ult: null, atencion: true }));
   filas.sort((a, b) => (b.atencion - a.atencion) || (new Date(b.ult ? b.ult.created_at : 0) - new Date(a.ult ? a.ult.created_at : 0)));
+  const qc = document.getElementById('wa-q-conv').value;
+  for (let n = filas.length - 1; n >= 0; n--) {
+    const f = filas[n];
+    const extra = f.esGrupo ? ((f.ult && f.ult.grupo_nombre) || f.g) : '';
+    if (!waCoincide(f.esGrupo ? null : f.g, f.c && f.c.numero, qc, extra)) filas.splice(n, 1);
+  }
   waFilasConv = filas;
   const box = document.getElementById('wa-conv-list');
-  if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Todavía no hay conversaciones. Aparecen cuando el bot reciba o mande mensajes.</div></div>'; return; }
+  if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">' + (qc ? 'Sin resultados para esa búsqueda.' : 'Todavía no hay conversaciones. Aparecen cuando el bot reciba o mande mensajes.') + '</div></div>'; return; }
   box.innerHTML = filas.map((f, i) => {
     const leads = f.esGrupo ? [] : (waLeadsPorKey[f.g] || []);
     const nombre = f.esGrupo ? ('Grupo: ' + (f.ult && f.ult.grupo_nombre ? f.ult.grupo_nombre : f.g.slice(2))) : (leads.length ? leads.map(l => l.nombre).join(' · ') : 'Número sin lead (' + f.g + ')');
@@ -4375,7 +4393,7 @@ function waChatear(k) {
   waAbiertos.add(k);
   waTabSet('conv'); waRenderConv();
 }
-async function waRefrescar() { await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv(); waRenderTel(); waRenderEstado(); }
+async function waRefrescar() { await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv(); waRenderCola(); waRenderTel(); waRenderEstado(); }
 setInterval(() => {
   const v = document.getElementById('view-whatsapp');
   if (!v || v.style.display !== 'block') return;
@@ -4383,7 +4401,7 @@ setInterval(() => {
   (async () => {
     const { data: cfg } = await sbAdmin.from('wa_config').select('bot_visto_at,activo').eq('id', 1).maybeSingle();
     if (cfg && waCfg) { waCfg.bot_visto_at = cfg.bot_visto_at; waCfg.activo = cfg.activo; waRenderEstado(); }
-    await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv();
+    await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv(); waRenderCola();
   })();
 }, 30000);
 async function waCampo(k, campo, valor) {
@@ -4396,15 +4414,20 @@ async function waCampo(k, campo, valor) {
 async function waCargarCola() {
   const { data } = await sbAdmin.from('wa_cola').select('*').order('id', { ascending: false }).limit(100);
   waColaRows = data || [];
+  waRenderCola();
+}
+function waRenderCola() {
+  const qk = document.getElementById('wa-q-cola').value;
+  const rowsF = waColaRows.filter(r => waCoincide(r.telefono_key, r.numero, qk, r.grupo_id));
   const col = { pendiente: ['#f2f2f2', '#404040'], enviando: ['#e7f0f8', '#0F527C'], enviado: ['#e7f6ec', '#15803d'], error: ['#fef3f2', '#b42318'], cancelado: ['#f2f2f2', '#737373'] };
-  document.getElementById('wa-tbody-cola').innerHTML = waColaRows.length ? waColaRows.map(r => {
+  document.getElementById('wa-tbody-cola').innerHTML = rowsF.length ? rowsF.map(r => {
     const [bg, fg] = col[r.estado] || col.pendiente;
     return '<tr><td class="mono" style="font-size:12px">' + waFecha(r.created_at) + '</td><td>' + (r.tipo === 'validar' ? 'Validar teléfono' : waH(r.origen)) + '</td>' +
       '<td class="mono" style="font-size:12px">' + waH(r.grupo_id || r.numero || '—') + '</td>' +
       '<td style="font-size:12px;max-width:380px">' + waH(r.cuerpo || '—') + (r.error ? '<div style="color:#b42318">' + waH(r.error) + '</div>' : '') + '</td>' +
       '<td>' + waChip(r.estado.toUpperCase(), bg, fg) + '</td>' +
       '<td>' + (r.estado === 'pendiente' ? '<button class="btn btn-outline btn-sm" onclick="waCancelar(' + r.id + ')">Cancelar</button>' : '') + '</td></tr>';
-  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">La cola está vacía.</div></div></td></tr>';
+  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">' + (qk ? 'Sin resultados para esa búsqueda.' : 'La cola está vacía.') + '</div></div></td></tr>';
 }
 async function waCancelar(id) {
   const { error } = await sbAdmin.from('wa_cola').update({ estado: 'cancelado', hecho_at: new Date().toISOString() }).eq('id', id).eq('estado', 'pendiente');
@@ -4418,7 +4441,8 @@ function waRenderTel() {
   waContactos.forEach(c => { cuenta[c.estado] = (cuenta[c.estado] || 0) + 1; });
   document.getElementById('wa-tel-resumen').textContent = cuenta.valido + ' válidos · ' + cuenta.invalido + ' inválidos · ' + cuenta.error + ' con error · ' + cuenta.pendiente + ' sin validar';
   const col = { valido: ['#e7f6ec', '#15803d'], invalido: ['#fef3f2', '#b42318'], error: ['#fff4e5', '#b45309'], pendiente: ['#f2f2f2', '#737373'] };
-  const rows = waContactos.filter(c => !f || c.estado === f).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const qt = document.getElementById('wa-q-tel').value;
+  const rows = waContactos.filter(c => (!f || c.estado === f) && waCoincide(c.telefono_key, c.numero, qt)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   document.getElementById('wa-tbody-tel').innerHTML = rows.length ? rows.map(c => {
     const leads = waLeadsPorKey[c.telefono_key] || [];
     const [bg, fg] = col[c.estado] || col.pendiente;
