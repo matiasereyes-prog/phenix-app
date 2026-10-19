@@ -4780,7 +4780,9 @@ async function loadDatosLead(leadId) {
     ['Tipo', d.tipo_persona === 'juridica' ? 'Empresa' : 'Persona física'],
     [d.tipo_persona === 'juridica' ? 'CUIT' : 'DNI', d.documento],
     ['Actividad', d.actividad], ['Ingresos / facturación 12m', d.ingresos],
-    ['Modelo confirmado', d.modelo_confirmado], ['Plazo', d.plazo_meses || '—'],
+    ['Bien a financiar', d.modelo_confirmado],
+    ['Activos en garantía', d.activos_garantia || '—'], ['Monto aprox. en garantía', d.monto_garantia || '—'],
+    ['Plazo', d.plazo_meses || '—'],
     ['Anticipo', d.anticipo || '—'], ['Localidad', d.localidad],
     ['Horario para llamar', d.horario_contacto || 'Indistinto'],
   ];
