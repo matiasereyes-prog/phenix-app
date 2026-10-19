@@ -448,12 +448,19 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="pendiente">Formulario pendiente</option>
           <option value="sin_solicitar">Sin solicitar</option>
         </select>
+        <select class="filter-select" id="filter-lead-act" onchange="filterLeads()">
+          <option value="">Actividades: todas</option>
+          <option value="0">Sin actividades (0)</option>
+          <option value="1">1 actividad</option>
+          <option value="2">2 actividades</option>
+          <option value="3+">3 o más</option>
+        </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer"><input type="checkbox" id="filter-lead-dup" onchange="filterLeads()"/> Solo duplicados</label>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
           <table class="data-table">
-            <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Auto</th><th>Monto</th><th>Red</th><th>Campaña</th><th>Responsable</th><th>Próx. contacto</th><th>Próxima acción</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Auto</th><th>Monto</th><th>Red</th><th>Campaña</th><th>Responsable</th><th>Próx. contacto</th><th>Próxima acción</th><th>Act.</th><th>Estado</th><th></th></tr></thead>
             <tbody id="tbody-leads"></tbody>
           </table>
         </div>
@@ -2119,6 +2126,7 @@ let allLeads = [];
 let currentLeaseId = null;
 let currentLeadId = null;
 let leadsDuplicados = {};
+let leadsActividades = {}; // lead_id -> cantidad de actividades del equipo (sin mail automático ni acciones del cliente)
 
 // ══════════════════════════════════════════════════════════════════
 // AUTH
@@ -2464,6 +2472,7 @@ async function irALeadsNuevos() {
   document.getElementById('filter-lead-canal').value = '';
   document.getElementById('filter-lead-dup').checked = false;
   document.getElementById('filter-lead-form').value = '';
+  document.getElementById('filter-lead-act').value = '';
   filterLeads();
 }
 
@@ -4158,8 +4167,26 @@ async function loadLeads() {
   const { data } = await sbAdmin.from('leads').select('*').order('created_at',{ascending:false});
   allLeads = data || [];
   calcularDuplicadosLeads();
+  await cargarActividadesLeads();
   renderLeadsTable(allLeads);
 }
+
+// Actividades = registros del historial hechos por el equipo. No cuentan el mail automático ni lo que hace el cliente.
+async function cargarActividadesLeads() {
+  const cuentas = {};
+  try {
+    for (let desde = 0; ; desde += 1000) {
+      const { data, error } = await sbAdmin.from('leads_historial').select('lead_id, responsable')
+        .order('created_at', { ascending: true }).range(desde, desde + 999);
+      if (error || !data) break;
+      data.forEach(h => { if (h.responsable !== 'Automático' && h.responsable !== 'Cliente') cuentas[h.lead_id] = (cuentas[h.lead_id] || 0) + 1; });
+      if (data.length < 1000) break;
+    }
+  } catch (e) { console.error('cargarActividadesLeads', e); }
+  leadsActividades = cuentas;
+}
+function actividadesLead(l) { return leadsActividades[l.id] || 0; }
+function leadSinActividad(l) { return actividadesLead(l) === 0 && l.estado !== 'convertido' && l.estado !== 'rechazado'; }
 
 // Duplicados: mismo email, o mismo teléfono (últimos 10 dígitos)
 function _claveEmailLead(l) { return (l.email || '').trim().toLowerCase(); }
@@ -4197,7 +4224,10 @@ function filterLeads() {
     const matchDup = !document.getElementById('filter-lead-dup').checked || !!leadsDuplicados[l.id];
     const form = document.getElementById('filter-lead-form').value;
     const matchForm = !form || estadoFormularioLead(l) === form;
-    return matchQ && matchEstado && matchCanal && matchDup && matchForm;
+    const act = document.getElementById('filter-lead-act').value;
+    const n = actividadesLead(l);
+    const matchAct = !act || (act === '3+' ? n >= 3 : n === Number(act));
+    return matchQ && matchEstado && matchCanal && matchDup && matchForm && matchAct;
   });
   renderLeadsTable(filtered);
 }
@@ -4205,7 +4235,7 @@ function filterLeads() {
 function renderLeadsTable(data) {
   const tbody = document.getElementById('tbody-leads');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📬</div><div class="empty-text">Sin leads registrados.</div></div></td></tr>`; return; }
-  tbody.innerHTML = data.map(l => '<tr onclick="abrirDetalleLead(\'' + l.id + '\')">' +
+  tbody.innerHTML = data.map(l => '<tr onclick="abrirDetalleLead(\'' + l.id + '\')"' + (leadSinActividad(l) ? ' style="background:#e7f6ec" title="Sin actividades del equipo todavía"' : '') + '>' +
     '<td class="bold">' + l.nombre + (l.datos_completados_at
       ? ' <span title="El cliente completó el formulario de datos" style="display:inline-block;font-size:10px;font-weight:700;background:#e7f6ec;color:#15803d;border-radius:6px;padding:2px 6px;margin-left:4px">✓ DATOS</span>'
       : (l.datos_solicitados_at ? ' <span title="Se pidió el formulario por mail y todavía no lo completó" style="display:inline-block;font-size:10px;font-weight:700;background:#f2f2f2;color:#737373;border-radius:6px;padding:2px 6px;margin-left:4px">DATOS PENDIENTES</span>' : '')) + (leadsDuplicados[l.id] ? ' <span title="Hay otro lead con el mismo email o teléfono" style="display:inline-block;font-size:10px;font-weight:700;background:#fff4e5;color:#b45309;border-radius:6px;padding:2px 6px;margin-left:4px">DUPLICADO</span>' : '') + '</td>' +
@@ -4218,6 +4248,7 @@ function renderLeadsTable(data) {
     '<td style="font-weight:600">' + (l.responsable||'—') + '</td>' +
     '<td class="mono" style="font-size:12px">' + (l.fecha_proxima_accion ? formatFecha(l.fecha_proxima_accion) : '—') + '</td>' +
     '<td style="font-size:12px;color:var(--text2)">' + (l.proxima_accion||'—') + '</td>' +
+    '<td style="text-align:center"><span style="display:inline-block;min-width:22px;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;' + (actividadesLead(l) ? 'background:#f2f2f2;color:#404040' : 'background:#bbf7d0;color:#15803d') + '">' + actividadesLead(l) + '</span></td>' +
     '<td>' + leadBadge(l.estado) + '</td>' +
     '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLead(\'' + l.id + '\')">→</button></td>' +
     '</tr>').join('');
@@ -4842,6 +4873,8 @@ async function guardarContacto() {
   showToast('✓ Contacto registrado');
   toggleNuevoContacto();
   loadHistorialLead(currentLeadId);
+  leadsActividades[currentLeadId] = (leadsActividades[currentLeadId] || 0) + 1;
+  filterLeads();
 
   // Actualizar estado del lead según resultado
   if (resultado === 'interesado') {
