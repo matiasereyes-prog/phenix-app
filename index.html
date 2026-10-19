@@ -757,7 +757,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">WhatsApp Bot</div>
         <span id="wa-chip-bot"></span><span id="wa-chip-activo"></span>
       </div>
-      <button class="btn btn-dark" id="wa-btn-switch" onclick="waToggleActivo()">…</button>
+      <div style="display:flex;gap:8px"><button class="btn btn-outline" onclick="waRefrescar()">↻ Actualizar</button><button class="btn btn-dark" id="wa-btn-switch" onclick="waToggleActivo()">…</button></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn btn-dark btn-sm" id="wa-btn-conv" onclick="waTabSet('conv')">Conversaciones</button>
@@ -4239,6 +4239,7 @@ async function crearCliente() {
 // ══════════════════════════════════════════════════════════════════
 // WHATSAPP BOT
 // ══════════════════════════════════════════════════════════════════
+let waAbiertos = new Set(), waFilasConv = [];
 let waCfg = null, waContactos = [], waMsgs = {}, waLeadsPorKey = {}, waColaRows = [], waReglas = [];
 function waKey(t) { const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : null; }
 function waH(v) { return escHtmlLead(v == null ? '' : v); }
@@ -4259,6 +4260,7 @@ async function loadWhatsApp() {
   waRenderEstado();
   waRenderCfg();
   await Promise.all([waCargarConv(), waCargarCola(), waCargarReglas()]);
+  waRenderConv();
   waRenderTel();
 }
 
@@ -4301,10 +4303,11 @@ function waRenderConv() {
   Object.keys(waMsgs).forEach(g => {
     const esGrupo = g.startsWith('g:');
     const c = esGrupo ? null : waContactos.find(x => x.telefono_key === g);
-    filas.push({ g, esGrupo, c, ult: waMsgs[g][0], atencion: !!(c && c.requiere_atencion) });
+    filas.push({ g, esGrupo, c, ult: waMsgs[g][0] || null, atencion: !!(c && c.requiere_atencion) });
   });
   waContactos.filter(c => c.requiere_atencion && !waMsgs[c.telefono_key]).forEach(c => filas.push({ g: c.telefono_key, esGrupo: false, c, ult: null, atencion: true }));
   filas.sort((a, b) => (b.atencion - a.atencion) || (new Date(b.ult ? b.ult.created_at : 0) - new Date(a.ult ? a.ult.created_at : 0)));
+  waFilasConv = filas;
   const box = document.getElementById('wa-conv-list');
   if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Todavía no hay conversaciones. Aparecen cuando el bot reciba o mande mensajes.</div></div>'; return; }
   box.innerHTML = filas.map((f, i) => {
@@ -4320,11 +4323,11 @@ function waRenderConv() {
       '<div style="min-width:0"><div style="font-weight:700">' + waH(nombre) + chips + '</div>' +
       '<div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:640px">' + (f.ult ? (f.ult.direccion === 'in' ? 'Cliente: ' : 'Bot: ') + waH(f.ult.cuerpo) : 'Sin mensajes guardados') + '</div></div>' +
       '<div style="font-size:12px;color:var(--text3);white-space:nowrap">' + waFecha(f.ult && f.ult.created_at) + '</div></div>' +
-      '<div id="wa-hilo-' + i + '" style="display:none;margin-top:10px">' + waHiloHtml(f) + '</div></div>';
+      '<div id="wa-hilo-' + i + '" style="display:' + (waAbiertos.has(f.g) ? 'block' : 'none') + ';margin-top:10px">' + waHiloHtml(f, i) + '</div></div>';
   }).join('');
 }
 
-function waHiloHtml(f) {
+function waHiloHtml(f, i) {
   const msgs = (waMsgs[f.g] || []).slice().reverse();
   let h = '<div style="background:var(--gray);border-radius:10px;padding:10px;max-height:320px;overflow-y:auto">' + (msgs.length ? msgs.map(m =>
     '<div style="display:flex;justify-content:' + (m.direccion === 'in' ? 'flex-start' : 'flex-end') + ';margin-bottom:6px"><div style="max-width:75%;background:' + (m.direccion === 'in' ? '#fff' : '#dcf8c6') + ';border-radius:10px;padding:7px 10px;font-size:13px;white-space:pre-wrap">' + waH(m.cuerpo) +
@@ -4336,9 +4339,53 @@ function waHiloHtml(f) {
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'respuestas_auto\',' + !f.c.respuestas_auto + ')">' + (f.c.respuestas_auto ? 'Desactivar' : 'Activar') + ' respuestas automáticas</button>' +
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'no_molestar\',' + !f.c.no_molestar + ')">' + (f.c.no_molestar ? 'Volver a permitir mensajes' : 'No molestar') + '</button></div>';
   }
+  const pend = waColaRows.filter(r => r.origen === 'manual' && ['pendiente', 'enviando', 'error'].includes(r.estado) && (f.esGrupo ? r.grupo_id === f.g.slice(2) : r.telefono_key === f.g)).reverse();
+  if (pend.length) h += '<div style="margin-top:8px">' + pend.map(r => '<div style="font-size:12px;color:' + (r.estado === 'error' ? '#b42318' : 'var(--text3)') + ';margin-bottom:3px">' + (r.estado === 'error' ? '⚠ No se pudo enviar: ' : '⏳ En cola, se envía cuando el bot consulte: ') + waH(r.cuerpo) + (r.error ? ' (' + waH(r.error) + ')' : '') + '</div>').join('') + '</div>';
+  const puede = f.esGrupo || (f.c && f.c.estado !== 'invalido');
+  h += puede
+    ? '<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end"><textarea class="field-input" id="wa-in-' + i + '" rows="2" placeholder="Escribí un mensaje para enviar por WhatsApp…" style="resize:vertical;flex:1"></textarea><button class="btn btn-dark" onclick="waEnviarManual(' + i + ')">Enviar</button></div>'
+    : '<div style="font-size:12px;color:#b42318;margin-top:8px">Este número no tiene WhatsApp o es inválido: no se puede enviar.</div>';
   return h;
 }
-function waToggleHilo(i) { const el = document.getElementById('wa-hilo-' + i); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+function waToggleHilo(i) {
+  const el = document.getElementById('wa-hilo-' + i), f = waFilasConv[i];
+  const abrir = el.style.display === 'none';
+  el.style.display = abrir ? 'block' : 'none';
+  if (f) { if (abrir) waAbiertos.add(f.g); else waAbiertos.delete(f.g); }
+}
+async function waEnviarManual(i) {
+  const f = waFilasConv[i]; if (!f) return;
+  const ta = document.getElementById('wa-in-' + i);
+  const texto = ta.value.trim();
+  if (!texto) { showToast('Escribí un mensaje'); return; }
+  if (f.c && f.c.no_molestar && !confirm('Este contacto pidió no recibir mensajes. ¿Enviar igual?')) return;
+  const fila = { tipo: 'mensaje', cuerpo: texto, origen: 'manual', creado_por: (currentUser && currentUser.email) || 'Equipo' };
+  if (f.esGrupo) fila.grupo_id = f.g.slice(2);
+  else { fila.telefono_key = f.g; fila.numero = (f.c && f.c.numero) || null; }
+  if (!f.esGrupo && !fila.numero) { showToast('Falta el número de este contacto'); return; }
+  const { error } = await sbAdmin.from('wa_cola').insert(fila);
+  if (error) { showToast('Error: ' + error.message); return; }
+  ta.value = '';
+  waAbiertos.add(f.g);
+  await waCargarCola(); waRenderConv();
+  showToast('✓ En cola: el bot lo envía en su próxima consulta');
+}
+function waChatear(k) {
+  waMsgs[k] = waMsgs[k] || [];
+  waAbiertos.add(k);
+  waTabSet('conv'); waRenderConv();
+}
+async function waRefrescar() { await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv(); waRenderTel(); waRenderEstado(); }
+setInterval(() => {
+  const v = document.getElementById('view-whatsapp');
+  if (!v || v.style.display !== 'block') return;
+  if ([...document.querySelectorAll('[id^="wa-in-"]')].some(t => t.value)) return;
+  (async () => {
+    const { data: cfg } = await sbAdmin.from('wa_config').select('bot_visto_at,activo').eq('id', 1).maybeSingle();
+    if (cfg && waCfg) { waCfg.bot_visto_at = cfg.bot_visto_at; waCfg.activo = cfg.activo; waRenderEstado(); }
+    await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv();
+  })();
+}, 30000);
 async function waCampo(k, campo, valor) {
   const { error } = await sbAdmin.from('wa_contactos').update({ [campo]: valor }).eq('telefono_key', k);
   if (error) { showToast('Error: ' + error.message); return; }
@@ -4379,7 +4426,7 @@ function waRenderTel() {
       '<td style="font-size:12px">' + (leads.length ? waH(leads.map(l => l.nombre).join(' · ')) : '—') + '</td>' +
       '<td>' + waChip(c.estado.toUpperCase(), bg, fg, c.error_detalle || '') + (c.no_molestar ? waChip('NO MOLESTAR', '#fef3f2', '#b42318') : '') + '</td>' +
       '<td class="mono">' + (c.recordatorios_enviados || 0) + '</td><td class="mono" style="font-size:12px">' + waFecha(c.ultimo_saliente_at) + '</td>' +
-      '<td>' + (c.estado === 'invalido' || c.estado === 'error' ? '<button class="btn btn-outline btn-sm" onclick="waRevalidar(\'' + c.telefono_key + '\')">Revalidar</button>' : '') + '</td></tr>';
+      '<td>' + (c.estado === 'valido' ? '<button class="btn btn-outline btn-sm" onclick="waChatear(\'' + c.telefono_key + '\')">Escribir</button>' : '') + (c.estado === 'invalido' || c.estado === 'error' ? '<button class="btn btn-outline btn-sm" onclick="waRevalidar(\'' + c.telefono_key + '\')">Revalidar</button>' : '') + '</td></tr>';
   }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">Sin teléfonos en este filtro.</div></div></td></tr>';
 }
 async function waRevalidar(k) {
