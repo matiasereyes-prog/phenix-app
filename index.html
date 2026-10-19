@@ -296,6 +296,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <button class="nav-btn" onclick="showView('blockchain')">Blockchain</button>
         <button class="nav-btn" onclick="showView('escrows')">Escrows</button>
         <button class="nav-btn" onclick="showView('cotizador')">Cotizador</button>
+        <button class="nav-btn" onclick="showView('whatsapp')">WhatsApp</button>
       </div>
     </div>
     <div class="topbar-right">
@@ -749,6 +750,80 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
     </div>
   </div>
+  <!-- WHATSAPP BOT -->
+  <div id="view-whatsapp" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">WhatsApp Bot</div>
+        <span id="wa-chip-bot"></span><span id="wa-chip-activo"></span>
+      </div>
+      <button class="btn btn-dark" id="wa-btn-switch" onclick="waToggleActivo()">…</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-dark btn-sm" id="wa-btn-conv" onclick="waTabSet('conv')">Conversaciones</button>
+      <button class="btn btn-outline btn-sm" id="wa-btn-cola" onclick="waTabSet('cola')">Cola de envíos</button>
+      <button class="btn btn-outline btn-sm" id="wa-btn-tel" onclick="waTabSet('tel')">Teléfonos</button>
+      <button class="btn btn-outline btn-sm" id="wa-btn-cfg" onclick="waTabSet('cfg')">Configuración</button>
+    </div>
+
+    <div id="wa-tab-conv"><div class="card" id="wa-conv-list" style="padding:6px 0"></div></div>
+
+    <div id="wa-tab-cola" style="display:none"><div class="card"><div style="overflow-x:auto">
+      <table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Destino</th><th>Mensaje</th><th>Estado</th><th></th></tr></thead><tbody id="wa-tbody-cola"></tbody></table>
+    </div></div></div>
+
+    <div id="wa-tab-tel" style="display:none">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <select class="filter-select" id="wa-filtro-tel" onchange="waRenderTel()">
+          <option value="">Todos los teléfonos</option><option value="invalido">Inválidos (sin WhatsApp)</option><option value="error">Con error</option><option value="pendiente">Sin validar</option><option value="valido">Válidos</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="waEncolarValidaciones()">Validar los pendientes</button>
+        <span id="wa-tel-resumen" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <div class="card"><div style="overflow-x:auto">
+        <table class="data-table"><thead><tr><th>Teléfono</th><th>Leads</th><th>Estado</th><th>Recordatorios</th><th>Último mensaje del bot</th><th></th></tr></thead><tbody id="wa-tbody-tel"></tbody></table>
+      </div></div>
+    </div>
+
+    <div id="wa-tab-cfg" style="display:none">
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;margin-bottom:12px">Recordatorios a leads sin contacto del equipo</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+          <div><label class="form-label">Primer recordatorio (días)</label><input class="field-input" type="number" min="0" id="wa-c-primer"/></div>
+          <div><label class="form-label">Días entre recordatorios</label><input class="field-input" type="number" min="1" id="wa-c-entre"/></div>
+          <div><label class="form-label">Máx. recordatorios por lead</label><input class="field-input" type="number" min="0" id="wa-c-max"/></div>
+          <div><label class="form-label">Máx. mensajes por día</label><input class="field-input" type="number" min="1" id="wa-c-dia"/></div>
+          <div><label class="form-label">Desde la hora</label><input class="field-input" type="number" min="0" max="23" id="wa-c-desde"/></div>
+          <div><label class="form-label">Hasta la hora</label><input class="field-input" type="number" min="1" max="24" id="wa-c-hasta"/></div>
+          <div><label class="form-label">Pausa mínima entre envíos (seg)</label><input class="field-input" type="number" min="10" id="wa-c-pmin"/></div>
+          <div><label class="form-label">Pausa máxima entre envíos (seg)</label><input class="field-input" type="number" min="10" id="wa-c-pmax"/></div>
+          <div><label class="form-label">Mail de avisos</label><input class="field-input" type="email" id="wa-c-mail"/></div>
+          <div style="display:flex;align-items:flex-end"><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="wa-c-habiles"/> Solo días hábiles</label></div>
+        </div>
+        <div style="margin-top:16px"><label class="form-label">Mensajes de recordatorio (uno por recordatorio; separalos con una línea que diga ---; usá {nombre})</label>
+          <textarea class="field-input" id="wa-c-plantillas" rows="9" style="resize:vertical"></textarea></div>
+        <div style="margin-top:14px"><button class="btn btn-dark" onclick="waGuardarCfg()">Guardar configuración</button> <span id="wa-c-msg" style="font-size:12px;margin-left:8px"></span></div>
+      </div>
+
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;margin-bottom:4px">Respuestas automáticas</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">El bot responde cuando lo mencionan en un grupo, o en el chat de un contacto con las respuestas automáticas activadas. Se usa la primera regla cuyas palabras aparezcan en el mensaje.</div>
+        <div id="wa-reglas"></div>
+        <button class="btn btn-outline btn-sm" onclick="waNuevaRegla()">+ Agregar regla</button>
+      </div>
+
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;margin-bottom:8px">Conexión del bot</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          Dirección: <span class="mono" id="wa-url" style="user-select:all">https://xxscdrwkoutlualpveif.supabase.co/functions/v1/wa-bot</span><br/>
+          Cabecera <span class="mono">x-bot-key</span>: <span class="mono" id="wa-clave">••••••••</span>
+          <button class="btn btn-outline btn-sm" onclick="waMostrarClave()">Mostrar / copiar</button><br/>
+          Acciones (POST con JSON): <span class="mono">{"accion":"siguiente"}</span> pide el próximo trabajo; <span class="mono">{"accion":"resultado","id":…,"ok":true,"existe":true}</span> informa el resultado; <span class="mono">{"accion":"entrante","telefono":"…","texto":"…","grupo_id":"…","mencion":true}</span> avisa de un mensaje recibido.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="view-cotizador" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div>
@@ -2378,11 +2453,11 @@ async function continuarLoadApp() {
 // VIEWS
 // ══════════════════════════════════════════════════════════════════
 function showView(view) {
-  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador'].forEach(v => {
+  ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador','whatsapp'].forEach(v => {
     document.getElementById('view-' + v).style.display = v === view ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador'][i] === view);
+    b.classList.toggle('active', ['dashboard','leasings','clientes','leads','vehiculos','modelos','seguros','documentos','usuarios','logs','emails','blockchain','escrows','cotizador','whatsapp'][i] === view);
   });
   if (view === 'leasings') loadLeasings();
   if (view === 'clientes') loadClientes();
@@ -2397,6 +2472,7 @@ function showView(view) {
   if (view === 'blockchain') initBlockchainTab();
   if (view === 'escrows') loadEscrows();
   if (view === 'cotizador') loadConfigCotizador();
+  if (view === 'whatsapp') loadWhatsApp();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -4161,6 +4237,237 @@ async function crearCliente() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// WHATSAPP BOT
+// ══════════════════════════════════════════════════════════════════
+let waCfg = null, waContactos = [], waMsgs = {}, waLeadsPorKey = {}, waColaRows = [], waReglas = [];
+function waKey(t) { const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : null; }
+function waH(v) { return escHtmlLead(v == null ? '' : v); }
+function waFecha(iso) { return iso ? new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'; }
+function waChip(txt, bg, fg, title) { return '<span ' + (title ? 'title="' + waH(title) + '" ' : '') + 'style="display:inline-block;font-size:10px;font-weight:700;background:' + bg + ';color:' + fg + ';border-radius:6px;padding:2px 6px;margin-left:4px">' + txt + '</span>'; }
+
+function waTabSet(t) {
+  ['conv', 'cola', 'tel', 'cfg'].forEach(x => {
+    document.getElementById('wa-tab-' + x).style.display = x === t ? 'block' : 'none';
+    const b = document.getElementById('wa-btn-' + x);
+    b.classList.toggle('btn-dark', x === t); b.classList.toggle('btn-outline', x !== t);
+  });
+}
+
+async function loadWhatsApp() {
+  const { data: cfg } = await sbAdmin.from('wa_config').select('*').eq('id', 1).maybeSingle();
+  waCfg = cfg;
+  waRenderEstado();
+  waRenderCfg();
+  await Promise.all([waCargarConv(), waCargarCola(), waCargarReglas()]);
+  waRenderTel();
+}
+
+function waRenderEstado() {
+  if (!waCfg) return;
+  const vivo = waCfg.bot_visto_at && (Date.now() - new Date(waCfg.bot_visto_at).getTime()) < 3 * 60 * 1000;
+  document.getElementById('wa-chip-bot').innerHTML = vivo
+    ? waChip('● BOT CONECTADO', '#e7f6ec', '#15803d', 'El bot consultó hace menos de 3 minutos')
+    : waChip('● BOT SIN CONEXIÓN', '#fef3f2', '#b42318', waCfg.bot_visto_at ? 'Última consulta: ' + waFecha(waCfg.bot_visto_at) : 'Todavía no se conectó');
+  document.getElementById('wa-chip-activo').innerHTML = waCfg.activo ? waChip('ENVÍOS ACTIVOS', '#e7f6ec', '#15803d') : waChip('ENVÍOS PAUSADOS', '#f2f2f2', '#737373');
+  document.getElementById('wa-btn-switch').textContent = waCfg.activo ? 'Pausar bot' : 'Activar bot';
+}
+
+async function waToggleActivo() {
+  if (!waCfg) return;
+  const nuevo = !waCfg.activo;
+  if (nuevo && !confirm('¿Activar el bot? Empezará a validar teléfonos y a mandar los recordatorios configurados.')) return;
+  const { error } = await sbAdmin.from('wa_config').update({ activo: nuevo, updated_at: new Date().toISOString() }).eq('id', 1);
+  if (error) { showToast('Error: ' + error.message); return; }
+  waCfg.activo = nuevo; waRenderEstado();
+  showToast(nuevo ? '✓ Bot activado' : '✓ Bot pausado');
+}
+
+async function waCargarConv() {
+  const [c, m, l] = await Promise.all([
+    sbAdmin.from('wa_contactos').select('*'),
+    sbAdmin.from('wa_mensajes').select('*').order('created_at', { ascending: false }).limit(500),
+    sbAdmin.from('leads').select('id,nombre,telefono,estado'),
+  ]);
+  waContactos = c.data || [];
+  waLeadsPorKey = {};
+  (l.data || []).forEach(x => { const k = waKey(x.telefono); if (k) (waLeadsPorKey[k] = waLeadsPorKey[k] || []).push(x); });
+  waMsgs = {};
+  (m.data || []).forEach(x => { const g = x.grupo_id ? 'g:' + x.grupo_id : x.telefono_key; if (g) (waMsgs[g] = waMsgs[g] || []).push(x); });
+  waRenderConv();
+}
+
+function waRenderConv() {
+  const filas = [];
+  Object.keys(waMsgs).forEach(g => {
+    const esGrupo = g.startsWith('g:');
+    const c = esGrupo ? null : waContactos.find(x => x.telefono_key === g);
+    filas.push({ g, esGrupo, c, ult: waMsgs[g][0], atencion: !!(c && c.requiere_atencion) });
+  });
+  waContactos.filter(c => c.requiere_atencion && !waMsgs[c.telefono_key]).forEach(c => filas.push({ g: c.telefono_key, esGrupo: false, c, ult: null, atencion: true }));
+  filas.sort((a, b) => (b.atencion - a.atencion) || (new Date(b.ult ? b.ult.created_at : 0) - new Date(a.ult ? a.ult.created_at : 0)));
+  const box = document.getElementById('wa-conv-list');
+  if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Todavía no hay conversaciones. Aparecen cuando el bot reciba o mande mensajes.</div></div>'; return; }
+  box.innerHTML = filas.map((f, i) => {
+    const leads = f.esGrupo ? [] : (waLeadsPorKey[f.g] || []);
+    const nombre = f.esGrupo ? ('Grupo: ' + (f.ult && f.ult.grupo_nombre ? f.ult.grupo_nombre : f.g.slice(2))) : (leads.length ? leads.map(l => l.nombre).join(' · ') : 'Número sin lead (' + f.g + ')');
+    let chips = '';
+    if (f.atencion) chips += waChip('RESPONDIÓ · ATENCIÓN', '#fff4e5', '#b45309', 'El cliente escribió y falta que el equipo lo atienda');
+    if (f.c && f.c.no_molestar) chips += waChip('NO MOLESTAR', '#fef3f2', '#b42318');
+    if (f.c && f.c.respuestas_auto) chips += waChip('RESPUESTAS AUTO', '#e7f0f8', '#0F527C');
+    if (leads.length > 1) chips += waChip(leads.length + ' LEADS', '#f2f2f2', '#404040', 'Varios leads comparten este teléfono');
+    return '<div style="border-bottom:1px solid var(--border);padding:12px 18px">' +
+      '<div style="display:flex;justify-content:space-between;gap:12px;cursor:pointer" onclick="waToggleHilo(' + i + ')">' +
+      '<div style="min-width:0"><div style="font-weight:700">' + waH(nombre) + chips + '</div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:640px">' + (f.ult ? (f.ult.direccion === 'in' ? 'Cliente: ' : 'Bot: ') + waH(f.ult.cuerpo) : 'Sin mensajes guardados') + '</div></div>' +
+      '<div style="font-size:12px;color:var(--text3);white-space:nowrap">' + waFecha(f.ult && f.ult.created_at) + '</div></div>' +
+      '<div id="wa-hilo-' + i + '" style="display:none;margin-top:10px">' + waHiloHtml(f) + '</div></div>';
+  }).join('');
+}
+
+function waHiloHtml(f) {
+  const msgs = (waMsgs[f.g] || []).slice().reverse();
+  let h = '<div style="background:var(--gray);border-radius:10px;padding:10px;max-height:320px;overflow-y:auto">' + (msgs.length ? msgs.map(m =>
+    '<div style="display:flex;justify-content:' + (m.direccion === 'in' ? 'flex-start' : 'flex-end') + ';margin-bottom:6px"><div style="max-width:75%;background:' + (m.direccion === 'in' ? '#fff' : '#dcf8c6') + ';border-radius:10px;padding:7px 10px;font-size:13px;white-space:pre-wrap">' + waH(m.cuerpo) +
+    '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + waFecha(m.created_at) + (m.direccion === 'out' ? ' · ' + waH(m.origen) : '') + '</div></div></div>').join('') : '<div style="font-size:12px;color:var(--text3)">Sin mensajes.</div>') + '</div>';
+  if (f.c) {
+    const k = f.c.telefono_key;
+    h += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+      (f.c.requiere_atencion ? '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'requiere_atencion\',false)">Marcar como atendido</button>' : '') +
+      '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'respuestas_auto\',' + !f.c.respuestas_auto + ')">' + (f.c.respuestas_auto ? 'Desactivar' : 'Activar') + ' respuestas automáticas</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'no_molestar\',' + !f.c.no_molestar + ')">' + (f.c.no_molestar ? 'Volver a permitir mensajes' : 'No molestar') + '</button></div>';
+  }
+  return h;
+}
+function waToggleHilo(i) { const el = document.getElementById('wa-hilo-' + i); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+async function waCampo(k, campo, valor) {
+  const { error } = await sbAdmin.from('wa_contactos').update({ [campo]: valor }).eq('telefono_key', k);
+  if (error) { showToast('Error: ' + error.message); return; }
+  const c = waContactos.find(x => x.telefono_key === k); if (c) c[campo] = valor;
+  waRenderConv(); waRenderTel();
+}
+
+async function waCargarCola() {
+  const { data } = await sbAdmin.from('wa_cola').select('*').order('id', { ascending: false }).limit(100);
+  waColaRows = data || [];
+  const col = { pendiente: ['#f2f2f2', '#404040'], enviando: ['#e7f0f8', '#0F527C'], enviado: ['#e7f6ec', '#15803d'], error: ['#fef3f2', '#b42318'], cancelado: ['#f2f2f2', '#737373'] };
+  document.getElementById('wa-tbody-cola').innerHTML = waColaRows.length ? waColaRows.map(r => {
+    const [bg, fg] = col[r.estado] || col.pendiente;
+    return '<tr><td class="mono" style="font-size:12px">' + waFecha(r.created_at) + '</td><td>' + (r.tipo === 'validar' ? 'Validar teléfono' : waH(r.origen)) + '</td>' +
+      '<td class="mono" style="font-size:12px">' + waH(r.grupo_id || r.numero || '—') + '</td>' +
+      '<td style="font-size:12px;max-width:380px">' + waH(r.cuerpo || '—') + (r.error ? '<div style="color:#b42318">' + waH(r.error) + '</div>' : '') + '</td>' +
+      '<td>' + waChip(r.estado.toUpperCase(), bg, fg) + '</td>' +
+      '<td>' + (r.estado === 'pendiente' ? '<button class="btn btn-outline btn-sm" onclick="waCancelar(' + r.id + ')">Cancelar</button>' : '') + '</td></tr>';
+  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">La cola está vacía.</div></div></td></tr>';
+}
+async function waCancelar(id) {
+  const { error } = await sbAdmin.from('wa_cola').update({ estado: 'cancelado', hecho_at: new Date().toISOString() }).eq('id', id).eq('estado', 'pendiente');
+  if (error) { showToast('Error: ' + error.message); return; }
+  waCargarCola();
+}
+
+function waRenderTel() {
+  const f = document.getElementById('wa-filtro-tel').value;
+  const cuenta = { valido: 0, invalido: 0, error: 0, pendiente: 0 };
+  waContactos.forEach(c => { cuenta[c.estado] = (cuenta[c.estado] || 0) + 1; });
+  document.getElementById('wa-tel-resumen').textContent = cuenta.valido + ' válidos · ' + cuenta.invalido + ' inválidos · ' + cuenta.error + ' con error · ' + cuenta.pendiente + ' sin validar';
+  const col = { valido: ['#e7f6ec', '#15803d'], invalido: ['#fef3f2', '#b42318'], error: ['#fff4e5', '#b45309'], pendiente: ['#f2f2f2', '#737373'] };
+  const rows = waContactos.filter(c => !f || c.estado === f).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  document.getElementById('wa-tbody-tel').innerHTML = rows.length ? rows.map(c => {
+    const leads = waLeadsPorKey[c.telefono_key] || [];
+    const [bg, fg] = col[c.estado] || col.pendiente;
+    return '<tr><td class="mono" style="font-size:12px">' + waH(c.numero || c.telefono_key) + '</td>' +
+      '<td style="font-size:12px">' + (leads.length ? waH(leads.map(l => l.nombre).join(' · ')) : '—') + '</td>' +
+      '<td>' + waChip(c.estado.toUpperCase(), bg, fg, c.error_detalle || '') + (c.no_molestar ? waChip('NO MOLESTAR', '#fef3f2', '#b42318') : '') + '</td>' +
+      '<td class="mono">' + (c.recordatorios_enviados || 0) + '</td><td class="mono" style="font-size:12px">' + waFecha(c.ultimo_saliente_at) + '</td>' +
+      '<td>' + (c.estado === 'invalido' || c.estado === 'error' ? '<button class="btn btn-outline btn-sm" onclick="waRevalidar(\'' + c.telefono_key + '\')">Revalidar</button>' : '') + '</td></tr>';
+  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">Sin teléfonos en este filtro.</div></div></td></tr>';
+}
+async function waRevalidar(k) {
+  const c = waContactos.find(x => x.telefono_key === k); if (!c) return;
+  await sbAdmin.from('wa_contactos').update({ estado: 'pendiente', error_detalle: null }).eq('telefono_key', k);
+  await sbAdmin.from('wa_cola').insert({ tipo: 'validar', telefono_key: k, numero: c.numero, origen: 'validacion' });
+  c.estado = 'pendiente'; waRenderTel(); waCargarCola(); showToast('✓ Teléfono en cola para validar');
+}
+async function waEncolarValidaciones() {
+  const { data, error } = await sbAdmin.rpc('wa_encolar_validaciones');
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('✓ ' + (data || 0) + ' teléfonos en cola para validar'); waCargarCola();
+}
+
+function waRenderCfg() {
+  if (!waCfg) return;
+  const set = (id, v) => { document.getElementById(id).value = v; };
+  set('wa-c-primer', waCfg.dias_primer_recordatorio); set('wa-c-entre', waCfg.dias_entre_recordatorios);
+  set('wa-c-max', waCfg.max_recordatorios); set('wa-c-dia', waCfg.max_por_dia);
+  set('wa-c-desde', waCfg.hora_desde); set('wa-c-hasta', waCfg.hora_hasta);
+  set('wa-c-pmin', waCfg.pausa_min_seg); set('wa-c-pmax', waCfg.pausa_max_seg);
+  set('wa-c-mail', waCfg.aviso_email || ''); set('wa-c-plantillas', (waCfg.plantillas || []).join('\n---\n'));
+  document.getElementById('wa-c-habiles').checked = !!waCfg.solo_habiles;
+}
+async function waGuardarCfg() {
+  const n = id => parseInt(document.getElementById(id).value, 10);
+  const plantillas = document.getElementById('wa-c-plantillas').value.split(/\n\s*---\s*\n/).map(x => x.trim()).filter(Boolean);
+  const msg = document.getElementById('wa-c-msg');
+  if (!plantillas.length) { msg.textContent = 'Cargá al menos un mensaje.'; return; }
+  const cambios = {
+    dias_primer_recordatorio: n('wa-c-primer'), dias_entre_recordatorios: n('wa-c-entre'), max_recordatorios: n('wa-c-max'), max_por_dia: n('wa-c-dia'),
+    hora_desde: n('wa-c-desde'), hora_hasta: n('wa-c-hasta'), pausa_min_seg: n('wa-c-pmin'), pausa_max_seg: n('wa-c-pmax'),
+    aviso_email: document.getElementById('wa-c-mail').value.trim(), solo_habiles: document.getElementById('wa-c-habiles').checked,
+    plantillas, updated_at: new Date().toISOString(),
+  };
+  if (Object.values(cambios).some(v => typeof v === 'number' && isNaN(v))) { msg.textContent = 'Revisá los números.'; return; }
+  if (cambios.pausa_max_seg < cambios.pausa_min_seg) { msg.textContent = 'La pausa máxima no puede ser menor que la mínima.'; return; }
+  const { error } = await sbAdmin.from('wa_config').update(cambios).eq('id', 1);
+  if (error) { msg.textContent = 'Error: ' + error.message; return; }
+  Object.assign(waCfg, cambios); msg.textContent = ''; showToast('✓ Configuración guardada');
+}
+async function waMostrarClave() {
+  if (!waCfg) return;
+  document.getElementById('wa-clave').textContent = waCfg.bot_key;
+  try { await navigator.clipboard.writeText(waCfg.bot_key); showToast('✓ Clave copiada'); } catch (e) {}
+}
+
+async function waCargarReglas() {
+  const { data } = await sbAdmin.from('wa_reglas').select('*').order('orden', { ascending: true }).order('id', { ascending: true });
+  waReglas = data || [];
+  waRenderReglas();
+}
+function waRenderReglas() {
+  document.getElementById('wa-reglas').innerHTML = waReglas.map((r, i) =>
+    '<div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">' +
+    '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:8px">' +
+    '<div><label class="form-label">Nombre</label><input class="field-input" id="wa-r-nombre-' + i + '" value="' + waH(r.nombre) + '"/></div>' +
+    '<div><label class="form-label">Palabras que la activan (separadas por coma)</label><input class="field-input" id="wa-r-pal-' + i + '" value="' + waH((r.palabras || []).join(', ')) + '"/></div></div>' +
+    '<label class="form-label">Respuesta</label><textarea class="field-input" id="wa-r-resp-' + i + '" rows="2" style="resize:vertical">' + waH(r.respuesta) + '</textarea>' +
+    '<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="wa-r-act-' + i + '" ' + (r.activa ? 'checked' : '') + '/> Activa</label>' +
+    '<button class="btn btn-dark btn-sm" onclick="waGuardarRegla(' + i + ')">Guardar</button>' +
+    '<button class="btn btn-outline btn-sm" onclick="waEliminarRegla(' + i + ')">Eliminar</button></div></div>').join('') || '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Sin reglas.</div>';
+}
+function waNuevaRegla() { waReglas.push({ id: null, nombre: 'Nueva regla', palabras: [], respuesta: '', activa: true, orden: waReglas.length + 1 }); waRenderReglas(); }
+async function waGuardarRegla(i) {
+  const r = waReglas[i];
+  const fila = {
+    nombre: document.getElementById('wa-r-nombre-' + i).value.trim() || 'Regla',
+    palabras: document.getElementById('wa-r-pal-' + i).value.split(',').map(x => x.trim()).filter(Boolean),
+    respuesta: document.getElementById('wa-r-resp-' + i).value.trim(),
+    activa: document.getElementById('wa-r-act-' + i).checked,
+    orden: r.orden || i + 1,
+  };
+  if (!fila.respuesta || !fila.palabras.length) { showToast('Completá las palabras y la respuesta'); return; }
+  const { error } = r.id ? await sbAdmin.from('wa_reglas').update(fila).eq('id', r.id) : await sbAdmin.from('wa_reglas').insert(fila);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('✓ Regla guardada'); waCargarReglas();
+}
+async function waEliminarRegla(i) {
+  const r = waReglas[i];
+  if (!r.id) { waReglas.splice(i, 1); waRenderReglas(); return; }
+  if (!confirm('¿Eliminar la regla "' + r.nombre + '"?')) return;
+  const { error } = await sbAdmin.from('wa_reglas').delete().eq('id', r.id);
+  if (error) { showToast('Error: ' + error.message); return; }
+  waCargarReglas();
+}
+
+// ══════════════════════════════════════════════════════════════════
 // LEADS
 // ══════════════════════════════════════════════════════════════════
 async function loadLeads() {
@@ -4179,7 +4486,7 @@ async function cargarActividadesLeads() {
       const { data, error } = await sbAdmin.from('leads_historial').select('lead_id, responsable')
         .order('created_at', { ascending: true }).range(desde, desde + 999);
       if (error || !data) break;
-      data.forEach(h => { if (h.responsable !== 'Automático' && h.responsable !== 'Cliente') cuentas[h.lead_id] = (cuentas[h.lead_id] || 0) + 1; });
+      data.forEach(h => { if (h.responsable !== 'Automático' && h.responsable !== 'Cliente' && h.responsable !== 'Bot') cuentas[h.lead_id] = (cuentas[h.lead_id] || 0) + 1; });
       if (data.length < 1000) break;
     }
   } catch (e) { console.error('cargarActividadesLeads', e); }
