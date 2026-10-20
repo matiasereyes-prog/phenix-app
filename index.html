@@ -768,9 +768,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
     <div id="wa-tab-conv"><div style="margin-bottom:12px"><input class="search-input" type="text" id="wa-q-conv" placeholder="Buscar por nombre, email o teléfono…" oninput="waRenderConv()" style="max-width:360px"/></div><div class="card" id="wa-conv-list" style="padding:6px 0"></div></div>
 
-    <div id="wa-tab-cola" style="display:none"><div style="margin-bottom:12px"><input class="search-input" type="text" id="wa-q-cola" placeholder="Buscar por nombre, email o teléfono…" oninput="waRenderCola()" style="max-width:360px"/></div><div class="card"><div style="overflow-x:auto">
+    <div id="wa-tab-cola" style="display:none"><div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><input class="search-input" type="text" id="wa-q-cola" placeholder="Buscar por nombre, email o teléfono…" oninput="waColaBuscar()" style="max-width:320px"/><input class="filter-select" type="date" id="wa-f-dia" onchange="waColaFiltros()" title="Filtrar por día de creación"/><select class="filter-select" id="wa-f-estado" onchange="waColaFiltros()"><option value="">Todos los estados</option><option value="pendiente">Pendientes</option><option value="enviando">Enviando</option><option value="enviado">Enviados</option><option value="error">Con error</option><option value="cancelado">Cancelados</option></select><button class="btn btn-outline btn-sm" onclick="waColaLimpiar()">Limpiar filtros</button></div><div class="card"><div style="overflow-x:auto">
       <table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Destino</th><th>Mensaje</th><th>Estado</th><th></th></tr></thead><tbody id="wa-tbody-cola"></tbody></table>
-    </div></div></div>
+    </div></div><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span id="wa-cola-pag" style="font-size:12px;color:var(--text3)"></span><div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" id="wa-cola-ant" onclick="waColaPagina(-1)">← Anterior</button><button class="btn btn-outline btn-sm" id="wa-cola-sig" onclick="waColaPagina(1)">Siguiente →</button></div></div></div>
 
     <div id="wa-tab-tel" style="display:none">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
@@ -4297,6 +4297,7 @@ async function waToggleActivo() {
 }
 
 async function waCargarConv() {
+  await waCargarManualPend();
   const [c, m, l] = await Promise.all([
     sbAdmin.from('wa_contactos').select('*'),
     sbAdmin.from('wa_mensajes').select('*').order('created_at', { ascending: false }).limit(500),
@@ -4357,7 +4358,7 @@ function waHiloHtml(f, i) {
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'respuestas_auto\',' + !f.c.respuestas_auto + ')">' + (f.c.respuestas_auto ? 'Desactivar' : 'Activar') + ' respuestas automáticas</button>' +
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'no_molestar\',' + !f.c.no_molestar + ')">' + (f.c.no_molestar ? 'Volver a permitir mensajes' : 'No molestar') + '</button></div>';
   }
-  const pend = waColaRows.filter(r => r.origen === 'manual' && ['pendiente', 'enviando', 'error'].includes(r.estado) && (f.esGrupo ? r.grupo_id === f.g.slice(2) : r.telefono_key === f.g)).reverse();
+  const pend = waManualPend.filter(r => r.origen === 'manual' && ['pendiente', 'enviando', 'error'].includes(r.estado) && (f.esGrupo ? r.grupo_id === f.g.slice(2) : r.telefono_key === f.g)).reverse();
   if (pend.length) h += '<div style="margin-top:8px">' + pend.map(r => '<div style="font-size:12px;color:' + (r.estado === 'error' ? '#b42318' : 'var(--text3)') + ';margin-bottom:3px">' + (r.estado === 'error' ? '⚠ No se pudo enviar: ' : '⏳ En cola, se envía cuando el bot consulte: ') + waH(r.cuerpo) + (r.error ? ' (' + waH(r.error) + ')' : '') + '</div>').join('') + '</div>';
   const puede = f.esGrupo || (f.c && f.c.estado !== 'invalido');
   h += puede
@@ -4385,7 +4386,7 @@ async function waEnviarManual(i) {
   if (error) { showToast('Error: ' + error.message); return; }
   ta.value = '';
   waAbiertos.add(f.g);
-  await waCargarCola(); waRenderConv();
+  await waCargarManualPend(); await waCargarCola(); waRenderConv();
   showToast('✓ En cola: el bot lo envía en su próxima consulta');
 }
 function waChatear(k) {
@@ -4411,23 +4412,61 @@ async function waCampo(k, campo, valor) {
   waRenderConv(); waRenderTel();
 }
 
+let waColaPag = 0, waColaTotal = 0, waManualPend = [], waColaTimer = null;
+const WA_COLA_TAM = 25;
+async function waCargarManualPend() {
+  const { data } = await sbAdmin.from('wa_cola').select('*').eq('origen', 'manual').in('estado', ['pendiente', 'enviando', 'error']).order('id', { ascending: false }).limit(200);
+  waManualPend = data || [];
+}
+function waColaFiltros() { waColaPag = 0; waCargarCola(); }
+function waColaBuscar() { clearTimeout(waColaTimer); waColaTimer = setTimeout(waColaFiltros, 250); }
+function waColaLimpiar() {
+  document.getElementById('wa-f-dia').value = ''; document.getElementById('wa-f-estado').value = ''; document.getElementById('wa-q-cola').value = '';
+  waColaFiltros();
+}
+function waColaPagina(d) {
+  const max = Math.max(Math.ceil(waColaTotal / WA_COLA_TAM) - 1, 0);
+  waColaPag = Math.min(Math.max(waColaPag + d, 0), max);
+  waCargarCola();
+}
 async function waCargarCola() {
-  const { data } = await sbAdmin.from('wa_cola').select('*').order('id', { ascending: false }).limit(100);
+  const dia = document.getElementById('wa-f-dia').value;
+  const estado = document.getElementById('wa-f-estado').value;
+  const q = document.getElementById('wa-q-cola').value.trim();
+  let consulta = sbAdmin.from('wa_cola').select('*', { count: 'exact' }).order('id', { ascending: false });
+  if (dia) consulta = consulta.gte('created_at', dia + 'T00:00:00-03:00').lte('created_at', dia + 'T23:59:59.999-03:00');
+  if (estado) consulta = consulta.eq('estado', estado);
+  if (q) {
+    const claves = new Set(Object.keys(waLeadsPorKey).filter(k => waCoincide(k, null, q)));
+    waContactos.forEach(c => { if (waCoincide(c.telefono_key, c.numero, q)) claves.add(c.telefono_key); });
+    if (!claves.size) { waColaRows = []; waColaTotal = 0; waRenderCola(); return; }
+    consulta = consulta.in('telefono_key', [...claves]);
+  }
+  const desde = waColaPag * WA_COLA_TAM;
+  const { data, count, error } = await consulta.range(desde, desde + WA_COLA_TAM - 1);
+  if (error) { showToast('Error: ' + error.message); return; }
   waColaRows = data || [];
+  waColaTotal = count || 0;
+  if (!waColaRows.length && waColaPag > 0) { waColaPag = 0; return waCargarCola(); }
   waRenderCola();
 }
 function waRenderCola() {
-  const qk = document.getElementById('wa-q-cola').value;
-  const rowsF = waColaRows.filter(r => waCoincide(r.telefono_key, r.numero, qk, r.grupo_id));
   const col = { pendiente: ['#f2f2f2', '#404040'], enviando: ['#e7f0f8', '#0F527C'], enviado: ['#e7f6ec', '#15803d'], error: ['#fef3f2', '#b42318'], cancelado: ['#f2f2f2', '#737373'] };
-  document.getElementById('wa-tbody-cola').innerHTML = rowsF.length ? rowsF.map(r => {
+  const hayFiltro = document.getElementById('wa-f-dia').value || document.getElementById('wa-f-estado').value || document.getElementById('wa-q-cola').value.trim();
+  document.getElementById('wa-tbody-cola').innerHTML = waColaRows.length ? waColaRows.map(r => {
     const [bg, fg] = col[r.estado] || col.pendiente;
+    const leads = waLeadsPorKey[r.telefono_key] || [];
     return '<tr><td class="mono" style="font-size:12px">' + waFecha(r.created_at) + '</td><td>' + (r.tipo === 'validar' ? 'Validar teléfono' : waH(r.origen)) + '</td>' +
-      '<td class="mono" style="font-size:12px">' + waH(r.grupo_id || r.numero || '—') + '</td>' +
+      '<td style="font-size:12px">' + (leads.length ? '<div style="font-weight:600">' + waH(leads.map(l => l.nombre).join(' · ')) + '</div>' : '') + '<span class="mono">' + waH(r.grupo_id || r.numero || '—') + '</span></td>' +
       '<td style="font-size:12px;max-width:380px">' + waH(r.cuerpo || '—') + (r.error ? '<div style="color:#b42318">' + waH(r.error) + '</div>' : '') + '</td>' +
       '<td>' + waChip(r.estado.toUpperCase(), bg, fg) + '</td>' +
       '<td>' + (r.estado === 'pendiente' ? '<button class="btn btn-outline btn-sm" onclick="waCancelar(' + r.id + ')">Cancelar</button>' : '') + '</td></tr>';
-  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">' + (qk ? 'Sin resultados para esa búsqueda.' : 'La cola está vacía.') + '</div></div></td></tr>';
+  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-text">' + (hayFiltro ? 'Sin resultados para esos filtros.' : 'La cola está vacía.') + '</div></div></td></tr>';
+  const paginas = Math.max(Math.ceil(waColaTotal / WA_COLA_TAM), 1);
+  const desde = waColaTotal ? waColaPag * WA_COLA_TAM + 1 : 0;
+  document.getElementById('wa-cola-pag').textContent = waColaTotal ? ('Mostrando ' + desde + '–' + (desde + waColaRows.length - 1) + ' de ' + waColaTotal + ' · página ' + (waColaPag + 1) + ' de ' + paginas) : '0 resultados';
+  document.getElementById('wa-cola-ant').disabled = waColaPag === 0;
+  document.getElementById('wa-cola-sig').disabled = waColaPag >= paginas - 1;
 }
 async function waCancelar(id) {
   const { error } = await sbAdmin.from('wa_cola').update({ estado: 'cancelado', hecho_at: new Date().toISOString() }).eq('id', id).eq('estado', 'pendiente');
