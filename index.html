@@ -6,9 +6,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Phenix Leasing · Backend</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Librerías pesadas: se cargan solo cuando se usan (acelera la carga, sobre todo en móvil)
+(function () {
+  var URLS = {
+    ethers: 'https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js',
+    xlsx: 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    chart: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
+  }, P = {};
+  window.cargarLib = function (n) {
+    if (!P[n]) P[n] = new Promise(function (ok, ko) {
+      var s = document.createElement('script');
+      s.src = URLS[n]; s.onload = ok;
+      s.onerror = function () { delete P[n]; ko(new Error('No se pudo cargar la librería ' + n + '. Revisá tu conexión.')); };
+      document.head.appendChild(s);
+    });
+    return P[n];
+  };
+  // Aviso visible si algo falla (en el celular no hay consola)
+  var ultimo = 0;
+  function aviso(msg) {
+    msg = String(msg || '').trim();
+    if (!msg || /ResizeObserver|Script error\.?$/i.test(msg) || Date.now() - ultimo < 1500) return;
+    ultimo = Date.now();
+    var d = document.getElementById('err-global');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'err-global';
+      d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:3000;background:#7f1d1d;color:#fff;border-radius:10px;padding:10px 14px;font:13px Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+      d.onclick = function () { d.style.display = 'none'; };
+      document.body.appendChild(d);
+    }
+    d.textContent = '⚠ ' + msg.slice(0, 220) + ' (tocá para cerrar)'; d.style.display = 'block';
+    clearTimeout(d._t); d._t = setTimeout(function () { d.style.display = 'none'; }, 15000);
+  }
+  window.addEventListener('error', function (e) { aviso(e.message); });
+  window.addEventListener('load', function () { if (window.ethereum) setTimeout(function () { cargarLib('ethers').catch(function () {}); }, 2500); });
+  window.addEventListener('unhandledrejection', function (e) { aviso(e.reason && e.reason.message ? e.reason.message : e.reason); });
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -2203,6 +2238,7 @@ function getRedConfig(red) { return NETWORKS_CONFIG[red] || NETWORKS_CONFIG.base
 function explorerTx(red, hash) { return getRedConfig(red).explorer + '/tx/' + hash; }
 function explorerAddress(red, addr) { return getRedConfig(red).explorer + '/address/' + addr; }
 async function ensureNetwork(red) {
+  await cargarLib('ethers');
   const cfg = getRedConfig(red);
   const provider = new ethers.BrowserProvider(window.ethereum);
   const network = await provider.getNetwork();
@@ -2859,6 +2895,7 @@ async function loadLiquidacion() {
 
 
 async function exportarLiquidacion() {
+  await cargarLib('xlsx');
   const { data: cuotas } = await sbAdmin.from('cuotas').select('*').eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
   const { data: l } = await sbAdmin.from('contratos').select('*, usuarios!contratos_usuario_id_fkey(nombre), vehiculos(marca,modelo,anio)').eq('id', currentLeaseId).single();
   
@@ -3128,6 +3165,7 @@ async function loadLiquidacion() {
 }
 
 async function exportarLiquidacion() {
+  await cargarLib('xlsx');
   const { data: cuotas } = await sbAdmin.from('cuotas').select('*').eq('contrato_id', currentLeaseId).order('numero', { ascending: true });
   const { data: l } = await sbAdmin.from('contratos').select('*, usuarios!contratos_usuario_id_fkey(nombre), vehiculos(marca,modelo,anio)').eq('id', currentLeaseId).single();
   
@@ -3205,6 +3243,7 @@ function initBlockchainTab() {
 }
 
 async function conectarWalletBlockchain() {
+  await cargarLib('ethers');
   if (!window.ethereum) { showToast('Instalá MetaMask para operar'); return; }
   try {
     bcRedActual = document.getElementById('bc-network').value || 'base';
@@ -5090,6 +5129,7 @@ function filtrarEmailLogs(q) {
 // EXPORT A EXCEL
 // ══════════════════════════════════════════════════════════════════
 async function exportarExcel(vista) {
+  await cargarLib('xlsx');
   let data = [];
   let filename = '';
   const fecha = new Date().toISOString().split('T')[0];
@@ -5338,6 +5378,7 @@ let leadsChartCanal = null;
 let leadsChartTrend = null;
 
 async function loadLeadsStats() {
+  try { await cargarLib('chart'); } catch (e) { return; }
   const { data: leads } = await sbAdmin.from('leads').select('estado, canal, red_origen, responsable, created_at, campana');
   if (!leads || !leads.length) return;
 
@@ -5779,6 +5820,7 @@ async function crearVehiculoInline() {
 // IMPORTAR CUOTAS DESDE EXCEL
 // ══════════════════════════════════════════════════════════════════
 async function importarCuotasExcel(input) {
+  await cargarLib('xlsx');
   const file = input.files[0];
   if (!file) return;
   const msgEl = document.getElementById('import-excel-msg');
@@ -6848,6 +6890,7 @@ function previewExcelImport(input) {
 }
 
 async function importarExcelAlContrato(contratoId) {
+  await cargarLib('xlsx');
   if (!_pendingExcelFile) return;
   const msgEl = document.getElementById('nl-msg');
   msgEl.innerHTML = '<div class="alert alert-warning">Importando cuadro de amortización...</div>';
