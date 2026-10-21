@@ -282,6 +282,11 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
   #cz-bcra-informe{position:absolute;left:0;top:0;width:100%;border:0}
   .bc-acciones{display:none!important}
   .bc-sit,.bc-evol .bar,.bc-sem,.bc-leyenda span::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body.imp-pi100 #cz-bcra-informe,body.imp-pi100 #cz-bcra-informe *{visibility:hidden!important}
+  body.imp-pi100 #cz-pi100-informe,body.imp-pi100 #cz-pi100-informe *{visibility:visible!important}
+  body.imp-pi100 #cz-pi100-informe{position:absolute;left:0;top:0;width:100%;border:0}
+  .pi-acciones{display:none!important}
+  #cz-pi100-informe table{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
@@ -3798,6 +3803,16 @@ function pi100DetalleHtml(d) {
     otros.map(k => '<tr><td style="padding:4px 10px;color:#6b7280;font-size:12px">' + pi100Etiqueta(k) + '</td><td style="padding:4px 10px;font-size:13px">' + bcEsc(d[k]) + '</td></tr>').join('') + '</table>';
   return html;
 }
+function imprimirPi100() {
+  // El PDF incluye el detalle completo; se arma con el diálogo de impresión ("Guardar como PDF")
+  const box = document.getElementById('cz-pi100-detalle');
+  const antes = box ? box.style.display : null;
+  if (box) box.style.display = 'block';
+  document.body.classList.add('imp-pi100');
+  const fin = () => { document.body.classList.remove('imp-pi100'); if (box) box.style.display = antes; window.removeEventListener('afterprint', fin); };
+  window.addEventListener('afterprint', fin);
+  window.print();
+}
 function pi100ToggleDetalle() {
   const box = document.getElementById('cz-pi100-detalle'), btn = document.getElementById('cz-pi100-detalle-btn');
   const abrir = box.style.display === 'none';
@@ -3823,7 +3838,7 @@ function renderInformePi100(d) {
       '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
         '<div><div style="font-size:12px;color:#6b7280">Informe PI100</div>' +
         '<div style="font-size:20px;font-weight:700">' + n(d.APENOM) + '</div>' +
-        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
+        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + ' · Consultado ' + bcFechaHora(new Date()) + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
         '<div style="text-align:right"><div style="font-size:12px;color:#6b7280">Score</div><div style="font-size:30px;font-weight:800;line-height:1">' + n(d.SCORE) + '</div>' +
         '<div style="font-size:12px;color:#6b7280;margin-top:4px">Rango PI100 <b>' + n(d.RANGO) + '</b> / 100</div></div>' +
       '</div>' +
@@ -3837,7 +3852,7 @@ function renderInformePi100(d) {
         fila('Historial de situación', hist) +
         fila('Cheques rechazados', cheques) +
       '</table>' +
-      '<div style="margin-top:12px"><button class="btn btn-outline btn-sm" id="cz-pi100-detalle-btn" onclick="pi100ToggleDetalle()">Ver detalle completo</button></div>' +
+      '<div class="pi-acciones" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="cz-pi100-detalle-btn" onclick="pi100ToggleDetalle()">Ver detalle completo</button><button class="btn btn-outline btn-sm" onclick="imprimirPi100()">Descargar PDF</button></div>' +
       '<div id="cz-pi100-detalle" style="display:none">' + pi100DetalleHtml(d) + '</div>' +
       '<div class="bc-pie" style="margin-top:12px">Fuente: servicio PI100 (ingresos estimados y situación crediticia). Uso interno de Phenix Leasing S.A.; dato personal alcanzado por la Ley 25.326. La información corresponde al período más reciente disponible.</div>' +
     '</div>';
