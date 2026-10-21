@@ -4609,7 +4609,7 @@ async function crearCliente() {
 // ══════════════════════════════════════════════════════════════════
 // WHATSAPP BOT
 // ══════════════════════════════════════════════════════════════════
-let waAbiertos = new Set(), waFilasConv = [];
+let waAbiertos = new Set(), waFilasConv = [], waFoco = null;
 let waCfg = null, waContactos = [], waMsgs = {}, waLeadsPorKey = {}, waColaRows = [], waReglas = [];
 function waKey(t) { const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : null; }
 function waH(v) { return escHtmlLead(v == null ? '' : v); }
@@ -4688,7 +4688,12 @@ function waRenderConv() {
     filas.push({ g, esGrupo, c, ult: waMsgs[g][0] || null, atencion: !!(c && c.requiere_atencion) });
   });
   waContactos.filter(c => c.requiere_atencion && !waMsgs[c.telefono_key]).forEach(c => filas.push({ g: c.telefono_key, esGrupo: false, c, ult: null, atencion: true }));
-  filas.sort((a, b) => (b.atencion - a.atencion) || (new Date(b.ult ? b.ult.created_at : 0) - new Date(a.ult ? a.ult.created_at : 0)));
+  waAbiertos.forEach(k => {
+    if (k.startsWith('g:') || filas.some(f => f.g === k)) return;
+    const c = waContactos.find(x => x.telefono_key === k);
+    if (c) filas.push({ g: k, esGrupo: false, c, ult: null, atencion: false });
+  });
+  filas.sort((a, b) => ((b.g === waFoco) - (a.g === waFoco)) || (b.atencion - a.atencion) || (new Date(b.ult ? b.ult.created_at : 0) - new Date(a.ult ? a.ult.created_at : 0)));
   const qc = document.getElementById('wa-q-conv').value;
   for (let n = filas.length - 1; n >= 0; n--) {
     const f = filas[n];
@@ -4768,9 +4773,16 @@ async function waEnviarManual(i) {
   showToast('✓ En cola: se envía en un momento');
 }
 function waChatear(k) {
-  waMsgs[k] = waMsgs[k] || [];
   waAbiertos.add(k);
+  const q = document.getElementById('wa-q-conv'); if (q) q.value = '';   // un filtro de búsqueda podría ocultar la fila
+  waFoco = k;                                                             // sube este chat al principio de la lista
   waTabSet('conv'); waRenderConv();
+  waFoco = null;
+  const i = waFilasConv.findIndex(f => f.g === k);
+  if (i >= 0) {
+    const el = document.getElementById('wa-hilo-' + i);
+    if (el) { el.scrollIntoView({ block: 'center' }); const ta = document.getElementById('wa-in-' + i); if (ta) ta.focus(); }
+  } else showToast('No se encontró el contacto');
 }
 async function waRefrescar() { await Promise.all([waCargarConv(), waCargarCola()]); waRenderConv(); waRenderCola(); waRenderTel(); waRenderEstado(); }
 setInterval(() => {
