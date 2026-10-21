@@ -3733,7 +3733,8 @@ function czScoreManual() {
 // SCORE E INFORME PI100 (dentro del cotizador) — vía función consulta-scoring
 // ═══════════════════════════════════════════════════════════
 let czPi100Datos = null;
-async function consultarScorePi100() {
+async function consultarScorePi100(opts) {
+  opts = (opts && typeof opts === 'object' && !opts.target) ? opts : {};
   const cuit = bcDig(document.getElementById('cz-cuit').value);
   const err = document.getElementById('cz-bcra-error');
   const out = document.getElementById('cz-pi100-informe');
@@ -3745,7 +3746,7 @@ async function consultarScorePi100() {
   out.style.display = 'block'; out.innerHTML = '<div class="bc-card" style="color:#6b7280">Consultando score…</div>';
   try {
     const { data, error } = await sbAdmin.functions.invoke('consulta-scoring', {
-      body: { cuil: cuit, lead_id: czBcraLeadId || null, consultado_por: (currentUser && currentUser.email) || null }
+      body: { cuil: cuit, lead_id: czBcraLeadId || null, consultado_por: (currentUser && currentUser.email) || null, forzar: !!opts.forzar }
     });
     if (error) {
       let msg = error.message;
@@ -3755,7 +3756,7 @@ async function consultarScorePi100() {
     if (!data || data.error || !data.datos) throw new Error((data && data.error) || 'Respuesta inesperada del servicio.');
     const d = data.datos;
     czPi100Datos = d;
-    renderInformePi100(d);
+    renderInformePi100(d, { consultado_at: data.consultado_at, desde_cache: !!data.desde_cache });
     const score = parseInt(d.SCORE, 10);
     if (Number.isFinite(score)) {
       document.getElementById('cz-score').value = Math.min(Math.max(score, 0), 999);
@@ -3820,7 +3821,33 @@ function pi100ToggleDetalle() {
   btn.textContent = abrir ? 'Ocultar detalle' : 'Ver detalle completo';
 }
 
-function renderInformePi100(d) {
+
+// Cuadros de evolución de la situación crediticia (PI100 informa totales por tramo; el detalle por entidad sale del BCRA)
+function pi100CuadrosHtml(d) {
+  const num = v => (v == null || isNaN(Number(v))) ? null : Number(v);
+  const pill = sit => sit == null ? '—' : '<span style="display:inline-block;min-width:22px;text-align:center;padding:2px 8px;border-radius:10px;color:#fff;font-size:12px;font-weight:700;background:' + bcColorSit(Number(sit)) + ';-webkit-print-color-adjust:exact;print-color-adjust:exact">' + bcEsc(sit) + '</span>';
+  const tramos = [['Últimos 1 a 3 meses', d.ST_ULT_1M_3M_BCRA, d.MO_ST_ULT_1M_3M_BCRA], ['Entre 3 y 6 meses', d.ST_ULT_3M_6M_BCRA, d.MO_ST_ULT_3M_6M_BCRA], ['Entre 7 y 12 meses', d.ST_ULT_7M_12_BCRA, d.MO_ST_ULT_7M_12_BCRA], ['Entre 13 y 24 meses', d.ST_12M_24M_BCRA, d.MO_ST_12M_24M_BCRA]];
+  const maxMonto = Math.max(1, ...tramos.map(t => num(t[2]) || 0));
+  const th = 'padding:6px 10px;text-align:left;font-size:12px;color:#6b7280;font-weight:600';
+  const td = 'padding:6px 10px;font-size:13px';
+  const barra = (v, max, color) => '<div style="height:8px;border-radius:4px;background:' + color + ';width:' + Math.max(2, Math.round((v / max) * 100)) + '%;-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>';
+  let html = '<div style="font-weight:700;font-size:13px;margin:16px 0 4px">Evolución de la situación crediticia (peor situación y deuda por tramo)</div>' +
+    '<table style="width:100%;border-collapse:collapse;background:#f7f7f7;border-radius:8px"><tr><th style="' + th + '">Período</th><th style="' + th + '">Peor situación</th><th style="' + th + '">Deuda</th><th style="' + th + ';width:30%"></th></tr>' +
+    tramos.map(t => '<tr><td style="' + td + '">' + t[0] + '</td><td style="' + td + '">' + pill(t[1]) + '</td><td style="' + td + '">' + (num(t[2]) == null ? '—' : bcPesos(num(t[2]))) + '</td><td style="' + td + '">' + (num(t[2]) ? barra(num(t[2]), maxMonto, bcColorSit(Number(t[1]))) : '') + '</td></tr>').join('') + '</table>';
+  const dist = [1, 2, 3, 4, 5].map(i => [i, num(d['CANT_SITUACIONES_' + i]) || 0, num(d['MONTO_SITUACIONES_' + i]) || 0]).filter(x => x[1] > 0 || x[2] > 0);
+  if (dist.length) {
+    const maxD = Math.max(1, ...dist.map(x => x[2]));
+    html += '<div style="font-weight:700;font-size:13px;margin:16px 0 4px">Situación vigente: entidades y deuda por categoría</div>' +
+      '<table style="width:100%;border-collapse:collapse;background:#f7f7f7;border-radius:8px"><tr><th style="' + th + '">Situación</th><th style="' + th + '">Entidades</th><th style="' + th + '">Deuda</th><th style="' + th + ';width:30%"></th></tr>' +
+      dist.map(x => '<tr><td style="' + td + '">' + pill(x[0]) + '</td><td style="' + td + '">' + x[1] + '</td><td style="' + td + '">' + bcPesos(x[2]) + '</td><td style="' + td + '">' + (x[2] ? barra(x[2], maxD, bcColorSit(x[0])) : '') + '</td></tr>').join('') + '</table>';
+  }
+  if (d.ENTIDAD_BCRA_VIG) html += '<div style="font-size:12px;color:#6b7280;margin-top:8px">Entidad con la situación más alta vigente: <b style="color:#101010">' + bcEsc(d.ENTIDAD_BCRA_VIG) + '</b> (situación ' + n2(d.SIT_BCRA_MAX_VIG) + ', deuda ' + (num(d.DEUDA_BCRA_MAX_VIG) == null ? '—' : bcPesos(num(d.DEUDA_BCRA_MAX_VIG))) + '). El servicio no informa el historial entidad por entidad; ese detalle está en el informe del BCRA.</div>';
+  return html;
+}
+const n2 = v => (v == null || v === '') ? '—' : bcEsc(v);
+
+function renderInformePi100(d, meta) {
+  meta = meta || {};
   const n = v => (v == null || v === '') ? '—' : bcEsc(v);
   const pesos = v => (v == null || isNaN(Number(v))) ? '—' : bcPesos(Number(v));
   const fila = (k, v) => '<tr><td style="padding:6px 10px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">' + k + '</td><td style="padding:6px 10px;font-size:14px">' + v + '</td></tr>';
@@ -3838,7 +3865,7 @@ function renderInformePi100(d) {
       '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
         '<div><div style="font-size:12px;color:#6b7280">Informe PI100</div>' +
         '<div style="font-size:20px;font-weight:700">' + n(d.APENOM) + '</div>' +
-        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + ' · Consultado ' + bcFechaHora(new Date()) + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
+        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + ' · Consultado ' + bcFechaHora(meta.consultado_at || new Date()) + (meta.desde_cache ? ' (informe guardado)' : '') + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
         '<div style="text-align:right"><div style="font-size:12px;color:#6b7280">Score</div><div style="font-size:30px;font-weight:800;line-height:1">' + n(d.SCORE) + '</div>' +
         '<div style="font-size:12px;color:#6b7280;margin-top:4px">Rango PI100 <b>' + n(d.RANGO) + '</b> / 100</div></div>' +
       '</div>' +
@@ -3852,7 +3879,8 @@ function renderInformePi100(d) {
         fila('Historial de situación', hist) +
         fila('Cheques rechazados', cheques) +
       '</table>' +
-      '<div class="pi-acciones" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="cz-pi100-detalle-btn" onclick="pi100ToggleDetalle()">Ver detalle completo</button><button class="btn btn-outline btn-sm" onclick="imprimirPi100()">Descargar PDF</button></div>' +
+      pi100CuadrosHtml(d) +
+      '<div class="pi-acciones" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="cz-pi100-detalle-btn" onclick="pi100ToggleDetalle()">Ver detalle completo</button><button class="btn btn-outline btn-sm" onclick="imprimirPi100()">Descargar PDF</button><button class="btn btn-outline btn-sm" onclick="consultarScorePi100({ forzar: true })">Actualizar (nueva consulta)</button></div>' +
       '<div id="cz-pi100-detalle" style="display:none">' + pi100DetalleHtml(d) + '</div>' +
       '<div class="bc-pie" style="margin-top:12px">Fuente: servicio PI100 (ingresos estimados y situación crediticia). Uso interno de Phenix Leasing S.A.; dato personal alcanzado por la Ley 25.326. La información corresponde al período más reciente disponible.</div>' +
     '</div>';
