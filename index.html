@@ -4697,10 +4697,10 @@ function waRenderConv() {
   }
   waFilasConv = filas;
   const box = document.getElementById('wa-conv-list');
-  if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">' + (qc ? 'Sin resultados para esa búsqueda.' : 'Todavía no hay conversaciones. Aparecen cuando el bot reciba o mande mensajes.') + '</div></div>'; return; }
+  if (!filas.length) { box.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">' + (qc ? 'Sin resultados para esa búsqueda.' : 'Todavía no hay conversaciones. Aparecen cuando se reciban o envíen mensajes.') + '</div></div>'; return; }
   box.innerHTML = filas.map((f, i) => {
     const leads = f.esGrupo ? [] : (waLeadsPorKey[f.g] || []);
-    const nombre = f.esGrupo ? ('Grupo: ' + (f.ult && f.ult.grupo_nombre ? f.ult.grupo_nombre : f.g.slice(2))) : (leads.length ? leads.map(l => l.nombre).join(' · ') : 'Número sin lead (' + f.g + ')');
+    const nombre = f.esGrupo ? ('Grupo: ' + (f.ult && f.ult.grupo_nombre ? f.ult.grupo_nombre : f.g.slice(2))) : (leads.length ? leads.map(l => l.nombre).join(' · ') : 'Número sin lead (' + (waFmtTel(f.c && f.c.numero, f.g) || f.g) + ')');
     let chips = '';
     if (f.atencion) chips += waChip('RESPONDIÓ · ATENCIÓN', '#fff4e5', '#b45309', 'El cliente escribió y falta que el equipo lo atienda');
     if (f.c && f.c.no_molestar) chips += waChip('NO MOLESTAR', '#fef3f2', '#b42318');
@@ -4708,11 +4708,20 @@ function waRenderConv() {
     if (leads.length > 1) chips += waChip(leads.length + ' LEADS', '#f2f2f2', '#404040', 'Varios leads comparten este teléfono');
     return '<div style="border-bottom:1px solid var(--border);padding:12px 18px">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;cursor:pointer" onclick="waToggleHilo(' + i + ')">' +
-      '<div style="min-width:0"><div style="font-weight:700">' + waH(nombre) + chips + '</div>' +
-      '<div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:640px">' + (f.ult ? (f.ult.direccion === 'in' ? 'Cliente: ' : 'Bot: ') + waH(f.ult.cuerpo) : 'Sin mensajes guardados') + '</div></div>' +
+      '<div style="min-width:0"><div style="font-weight:700">' + waH(nombre) + (!f.esGrupo && waFmtTel(f.c && f.c.numero, f.g) && leads.length ? ' <span class="mono" style="font-weight:400;font-size:12px;color:var(--text3)">' + waH(waFmtTel(f.c && f.c.numero, f.g)) + '</span>' : '') + chips + '</div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:640px">' + (f.ult ? (f.ult.direccion === 'in' ? 'Cliente: ' : 'Phenix: ') + waH(f.ult.cuerpo) : 'Sin mensajes guardados') + '</div></div>' +
       '<div style="font-size:12px;color:var(--text3);white-space:nowrap">' + waFecha(f.ult && f.ult.created_at) + '</div></div>' +
       '<div id="wa-hilo-' + i + '" style="display:' + (waAbiertos.has(f.g) ? 'block' : 'none') + ';margin-top:10px">' + waHiloHtml(f, i) + '</div></div>';
   }).join('');
+}
+
+// Teléfono legible: +54 9 11 5975-0008 (si no es un celular de AMBA, se muestra con +)
+function waFmtTel(num, key) {
+  const d = String(num || '').replace(/\D/g, '');
+  if (/^5491[0-9]{9}$/.test(d)) return '+54 9 ' + d.slice(3, 5) + ' ' + d.slice(5, 9) + '-' + d.slice(9);
+  if (d.length >= 8) return '+' + d;
+  const k = String(key || '').replace(/\D/g, '');
+  return k.length >= 8 ? '…' + k.slice(-8) : '';
 }
 
 function waHiloHtml(f, i) {
