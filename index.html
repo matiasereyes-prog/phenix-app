@@ -4727,8 +4727,8 @@ function waHiloHtml(f, i) {
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'respuestas_auto\',' + !f.c.respuestas_auto + ')">' + (f.c.respuestas_auto ? 'Desactivar' : 'Activar') + ' respuestas automáticas</button>' +
       '<button class="btn btn-outline btn-sm" onclick="waCampo(\'' + k + '\',\'no_molestar\',' + !f.c.no_molestar + ')">' + (f.c.no_molestar ? 'Volver a permitir mensajes' : 'No molestar') + '</button></div>';
   }
-  const pend = waManualPend.filter(r => r.origen === 'manual' && ['pendiente', 'enviando', 'error'].includes(r.estado) && (f.esGrupo ? r.grupo_id === f.g.slice(2) : r.telefono_key === f.g)).reverse();
-  if (pend.length) h += '<div style="margin-top:8px">' + pend.map(r => '<div style="font-size:12px;color:' + (r.estado === 'error' ? '#b42318' : 'var(--text3)') + ';margin-bottom:3px">' + (r.estado === 'error' ? '⚠ No se pudo enviar: ' : '⏳ En cola, se envía cuando el bot consulte: ') + waH(r.cuerpo) + (r.error ? ' (' + waH(r.error) + ')' : '') + '</div>').join('') + '</div>';
+  const pend = waManualPend.filter(r => r.origen === 'manual' && ['pendiente', 'enviando', 'error', 'retenido'].includes(r.estado) && (f.esGrupo ? r.grupo_id === f.g.slice(2) : r.telefono_key === f.g)).reverse();
+  if (pend.length) h += '<div style="margin-top:8px">' + pend.map(r => '<div style="font-size:12px;color:' + (r.estado === 'error' ? '#b42318' : 'var(--text3)') + ';margin-bottom:3px">' + (r.estado === 'error' ? '⚠ No se pudo enviar: ' : r.estado === 'retenido' ? '⏸ Retenido, sale cuando el cliente responda: ' : '⏳ En cola, se envía en un momento: ') + waH(r.cuerpo) + (r.error ? ' (' + waH(r.error) + ')' : '') + '</div>').join('') + '</div>';
   const puede = f.esGrupo || (f.c && f.c.estado !== 'invalido');
   h += puede
     ? '<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end"><textarea class="field-input" id="wa-in-' + i + '" rows="2" placeholder="Escribí un mensaje para enviar por WhatsApp…" style="resize:vertical;flex:1"></textarea><button class="btn btn-dark" onclick="waEnviarManual(' + i + ')">Enviar</button></div>'
@@ -4756,7 +4756,7 @@ async function waEnviarManual(i) {
   ta.value = '';
   waAbiertos.add(f.g);
   await waCargarManualPend(); await waCargarCola(); waRenderConv();
-  showToast('✓ En cola: el bot lo envía en su próxima consulta');
+  showToast('✓ En cola: se envía en un momento');
 }
 function waChatear(k) {
   waMsgs[k] = waMsgs[k] || [];
@@ -4784,7 +4784,7 @@ async function waCampo(k, campo, valor) {
 let waColaPag = 0, waColaTotal = 0, waManualPend = [], waColaTimer = null;
 const WA_COLA_TAM = 25;
 async function waCargarManualPend() {
-  const { data } = await sbAdmin.from('wa_cola').select('*').eq('origen', 'manual').in('estado', ['pendiente', 'enviando', 'error']).order('id', { ascending: false }).limit(200);
+  const { data } = await sbAdmin.from('wa_cola').select('*').eq('origen', 'manual').in('estado', ['pendiente', 'enviando', 'error', 'retenido']).order('id', { ascending: false }).limit(200);
   waManualPend = data || [];
 }
 function waColaFiltros() { waColaPag = 0; waCargarCola(); }
