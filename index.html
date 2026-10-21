@@ -891,7 +891,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div>
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Cotizador</div>
-        <div style="font-size:13px;color:var(--text2);margin-top:2px">Cuota estimada por valor del auto, % de garantía y riesgo crediticio (Nosis)</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">Cuota estimada por valor del auto, % de garantía y riesgo crediticio (score PI100)</div>
       </div>
     </div>
 
@@ -914,15 +914,16 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       </div>
 
       <div style="border-top:1px solid #eee;margin:20px 0;padding-top:16px">
-        <label class="form-label">Riesgo crediticio (Nosis)</label>
+        <label class="form-label">Riesgo crediticio</label>
         <div style="display:flex;gap:8px;margin-top:6px">
           <input class="form-input" type="text" id="cz-cuit" placeholder="CUIT del cliente" style="flex:1" oninput="czCuitEditado()"/>
           <button class="btn btn-outline btn-sm" id="cz-bcra-btn" onclick="consultarBcra()" style="white-space:nowrap">Consultar BCRA</button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
-          <label class="form-label" style="margin:0" for="cz-score">Score Nosis</label>
+          <label class="form-label" style="margin:0" for="cz-score">Score</label>
           <input class="form-input" type="number" id="cz-score" min="0" max="999" step="1" placeholder="Ej: 720" style="width:130px" oninput="czScoreManual()"/>
-          <span style="font-size:11px;color:var(--text3)">Carga manual hasta integrar Nosis</span>
+          <button class="btn btn-outline btn-sm" id="cz-pi100-btn" onclick="consultarScorePi100()" style="white-space:nowrap">Consultar score</button>
+          <span style="font-size:11px;color:var(--text3)">Se completa con la consulta (CUIT) o cargalo a mano</span>
         </div>
         <div id="cz-nosis-result" style="font-size:13px;margin-top:8px;color:var(--text2)"></div>
         <div id="cz-bcra-hint" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
@@ -956,6 +957,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     </div>
 
     <div id="cz-bcra-informe" style="display:none;max-width:900px"></div>
+    <div id="cz-pi100-informe" style="display:none;max-width:900px"></div>
 
     <div id="cotizador-admin-matrix" class="card" style="padding:24px;max-width:900px;margin-top:20px;display:none">
       <div style="font-family:var(--display);font-size:16px;font-weight:700;margin-bottom:4px">Matriz de tasas anuales (%)</div>
@@ -3523,6 +3525,7 @@ const BC_SEM_TXT = { verde: 'VERDE', amarillo: 'AMARILLO', rojo: 'ROJO', sin_dat
 function czCuitEditado() {
   // si el usuario escribe otro CUIT a mano, ya no es la consulta del lead
   czBcraLeadId = null;
+  { const pi = document.getElementById('cz-pi100-informe'); if (pi) { pi.style.display = 'none'; pi.innerHTML = ''; } }
   const h = document.getElementById('cz-bcra-hint'); if (h) h.textContent = '';
   const c = document.getElementById('cz-cuit');
   if (c) { const pos = c.selectionStart; const antes = c.value.length; c.value = bcDig(c.value).length === 11 ? bcFmtCuit(c.value) : c.value; if (c.value.length !== antes) c.setSelectionRange(c.value.length, c.value.length); }
@@ -3693,6 +3696,89 @@ function czScoreManual() {
     }
   }
   calcularCuotaCotizador();
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// SCORE E INFORME PI100 (dentro del cotizador) — vía función consulta-scoring
+// ═══════════════════════════════════════════════════════════
+let czPi100Datos = null;
+async function consultarScorePi100() {
+  const cuit = bcDig(document.getElementById('cz-cuit').value);
+  const err = document.getElementById('cz-bcra-error');
+  const out = document.getElementById('cz-pi100-informe');
+  const btn = document.getElementById('cz-pi100-btn');
+  const res = document.getElementById('cz-nosis-result');
+  err.style.display = 'none';
+  if (cuit.length !== 11) { err.textContent = 'Ingresá un CUIT/CUIL de 11 dígitos para consultar el score.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Consultando…';
+  out.style.display = 'block'; out.innerHTML = '<div class="bc-card" style="color:#6b7280">Consultando score…</div>';
+  try {
+    const { data, error } = await sbAdmin.functions.invoke('consulta-scoring', {
+      body: { cuil: cuit, lead_id: czBcraLeadId || null, consultado_por: (currentUser && currentUser.email) || null }
+    });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context.json(); msg = j.error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    if (!data || data.error || !data.datos) throw new Error((data && data.error) || 'Respuesta inesperada del servicio.');
+    const d = data.datos;
+    czPi100Datos = d;
+    renderInformePi100(d);
+    const score = parseInt(d.SCORE, 10);
+    if (Number.isFinite(score)) {
+      document.getElementById('cz-score').value = Math.min(Math.max(score, 0), 999);
+      czScoreManual();
+      res.textContent = res.textContent.replace('carga manual', 'score PI100');
+    } else {
+      res.style.color = 'var(--red)';
+      res.textContent = 'El informe no trae score; cargalo a mano.';
+    }
+  } catch (e) {
+    out.style.display = 'none'; out.innerHTML = '';
+    err.textContent = e.message || 'Error al consultar el score';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Consultar score';
+  }
+}
+
+function renderInformePi100(d) {
+  const n = v => (v == null || v === '') ? '—' : bcEsc(v);
+  const pesos = v => (v == null || isNaN(Number(v))) ? '—' : bcPesos(Number(v));
+  const fila = (k, v) => '<tr><td style="padding:6px 10px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">' + k + '</td><td style="padding:6px 10px;font-size:14px">' + v + '</td></tr>';
+  const sit = d.SIT_BCRA_MAX_VIG == null ? null : Number(d.SIT_BCRA_MAX_VIG);
+  const sitHtml = sit == null ? '—' : '<b style="color:' + bcColorSit(sit) + '">Situación ' + sit + '</b>';
+  const emp = [1, 2, 3].filter(i => d['RAZON_SOCIAL_EMPLEADOR_' + i]).map(i =>
+    bcEsc(d['RAZON_SOCIAL_EMPLEADOR_' + i]) + ' <span style="color:#6b7280">(' + n(d['TIPO_EMPLEADOR_' + i]) + ', PI100 ' + n(d['PI100_EMPLEADOR_' + i]) + ')</span>').join('<br>') || '—';
+  const hist = [['Últ. 1 a 3 m', d.ST_ULT_1M_3M_BCRA], ['3 a 6 m', d.ST_ULT_3M_6M_BCRA], ['7 a 12 m', d.ST_ULT_7M_12_BCRA], ['13 a 24 m', d.ST_12M_24M_BCRA]]
+    .map(x => x[0] + ': <b style="color:' + bcColorSit(Number(x[1])) + '">' + n(x[1]) + '</b>').join(' · ');
+  const cheques = d.CHEQUES_RECHAZADOS === 'SI'
+    ? '<b style="color:#dc2626">SI</b> · ' + n(d.CANTIDAD_CHEQUES_RECHAZADOS) + ' cheque(s) · ' + pesos(d.MONTO_CHEQUES_RECHAZADOS)
+    : (d.CHEQUES_RECHAZADOS ? '<b style="color:#16a34a">NO</b>' : '—');
+  document.getElementById('cz-pi100-informe').innerHTML =
+    '<div class="bc-card">' +
+      '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
+        '<div><div style="font-size:12px;color:#6b7280">Informe PI100</div>' +
+        '<div style="font-size:20px;font-weight:700">' + n(d.APENOM) + '</div>' +
+        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
+        '<div style="text-align:right"><div style="font-size:12px;color:#6b7280">Score</div><div style="font-size:30px;font-weight:800;line-height:1">' + n(d.SCORE) + '</div>' +
+        '<div style="font-size:12px;color:#6b7280;margin-top:4px">Rango PI100 <b>' + n(d.RANGO) + '</b> / 100</div></div>' +
+      '</div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-top:12px;background:#f7f7f7;border-radius:8px">' +
+        fila('Ingreso estimado', pesos(d.DESDE) + ' a ' + pesos(d.HASTA) + ' <span style="color:#6b7280">(media ' + pesos(d.MEDIA) + ')</span>') +
+        fila('Ocupación', n(d.OCUPACION) + (d.MONOTRIBUTO && d.MONOTRIBUTO !== 'NO INSCRIPTO' ? ' · Monotributo ' + n(d.MONOTRIBUTO) : '')) +
+        fila('Empleadores', emp) +
+        fila('Ganancias / IVA', n(d.IMP_GANANCIAS) + ' / ' + n(d.IMP_IVA)) +
+        fila('Situación BCRA vigente', sitHtml + (d.ENTIDAD_BCRA_VIG ? ' · ' + n(d.ENTIDAD_BCRA_VIG) : '')) +
+        fila('Deuda (máx. situación)', pesos(d.DEUDA_BCRA_MAX_VIG) + ' · ' + n(d.CANT_BAN_OPER) + ' entidad(es)') +
+        fila('Historial de situación', hist) +
+        fila('Cheques rechazados', cheques) +
+      '</table>' +
+      '<div class="bc-pie" style="margin-top:12px">Fuente: servicio PI100 (ingresos estimados y situación crediticia). Uso interno de Phenix Leasing S.A.; dato personal alcanzado por la Ley 25.326. La información corresponde al período más reciente disponible.</div>' +
+    '</div>';
+  document.getElementById('cz-pi100-informe').style.display = 'block';
 }
 
 // (Reservada para la integración real con Nosis; hoy el score se carga a mano con czScoreManual.)
