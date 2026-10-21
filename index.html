@@ -963,6 +963,18 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <div>Depósito en garantía: <b id="cz-garantia-monto">—</b></div>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:10px">Estimación no vinculante. Sujeta a aprobación crediticia final.</div>
+        <div id="cz-compartir" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid #e5e5e5">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Compartir con el cliente (no incluye tasa ni score)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <input class="form-input" type="text" id="cz-cli-nombre" placeholder="Nombre del cliente (opcional)"/>
+            <input class="form-input" type="email" id="cz-cli-email" placeholder="Email del cliente"/>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="czDescargarPdf()">Descargar PDF</button>
+            <button class="btn btn-dark btn-sm" id="cz-enviar-btn" onclick="czEnviarEmail()">Enviar por email</button>
+          </div>
+          <div id="cz-compartir-msg" style="font-size:12px;margin-top:6px"></div>
+        </div>
       </div>
     </div>
 
@@ -3940,6 +3952,9 @@ function calcularCuotaCotizador() {
   const plazoMeses = parseInt(document.getElementById('cz-plazo')?.value);
   const resultado = document.getElementById('cz-resultado');
   if (!resultado) return;
+  czUltimaCotizacion = null;
+  const compartir = document.getElementById('cz-compartir');
+  if (compartir) compartir.style.display = 'none';
 
   if (!valorFinanciar || !garantiaPct || !plazoMeses || !czUltimoRiesgo) {
     resultado.style.display = 'none';
@@ -4006,6 +4021,88 @@ function calcularCuotaCotizador() {
   document.getElementById('cz-base').textContent = 'USD ' + baseSinIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-tasa').textContent = (Math.round(tasaAnual * 100) / 100) + '%';
   document.getElementById('cz-garantia-monto').textContent = 'USD ' + depositoGarantia.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+
+  czUltimaCotizacion = {
+    valorAuto: valorAuto || null, valorFinanciar, plazo: n, garantiaPct, deposito: depositoGarantia,
+    base: baseSinIva, canon: cuotaSinIva, iva: cuotaSinIva * IVA_PCT, total: cuotaConIva,
+  };
+  if (compartir) compartir.style.display = 'block';
+  czPrefillCliente();
+}
+
+// ---- Compartir la cotización: PDF y mail (sin tasa, score ni categoría de riesgo) ----
+let czUltimaCotizacion = null;
+let czClienteCargadoDe = null;
+
+async function czPrefillCliente() {
+  if (!czBcraLeadId || czClienteCargadoDe === czBcraLeadId) return;
+  czClienteCargadoDe = czBcraLeadId;
+  const { data } = await sbAdmin.from('leads').select('nombre,email').eq('id', czBcraLeadId).maybeSingle();
+  if (!data) return;
+  const n = document.getElementById('cz-cli-nombre'), e = document.getElementById('cz-cli-email');
+  if (n && !n.value && data.nombre) n.value = data.nombre;
+  if (e && !e.value && data.email && !String(data.email).includes('@sin')) e.value = data.email;
+}
+
+function czMonto(n) { return 'USD ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function czEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function czDescargarPdf() {
+  const c = czUltimaCotizacion;
+  if (!c) return;
+  const nombre = (document.getElementById('cz-cli-nombre').value || '').trim();
+  const fecha = new Date().toLocaleDateString('es-AR');
+  const filas = [];
+  if (c.valorAuto) filas.push(['Valor del vehículo (referencia)', czMonto(c.valorAuto)]);
+  filas.push(
+    ['Valor a financiar (IVA incluido)', czMonto(c.valorFinanciar)],
+    ['Plazo', c.plazo + ' meses'],
+    ['Depósito en garantía (' + String(Math.round(c.garantiaPct * 100) / 100).replace('.', ',') + '%)', czMonto(c.deposito)],
+    ['Canon mensual (sin IVA)', czMonto(c.canon)],
+    ['IVA 21%', czMonto(c.iva)],
+    ['Cuota mensual total', czMonto(c.total), true]
+  );
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Cotización Phenix Leasing</title><style>' +
+    'body{font-family:Arial,sans-serif;color:#101010;margin:0;padding:48px;max-width:720px}' +
+    'h1{font-size:26px;margin:24px 0 4px}.sub{color:#606060;font-size:14px;margin-bottom:24px}' +
+    'table{width:100%;border-collapse:collapse;font-size:15px}td{padding:12px 0;border-bottom:1px solid #e5e5e5}' +
+    'td+td{text-align:right}.fuerte td{font-weight:800;font-size:18px;border-bottom:2px solid #101010}' +
+    '.pie{margin-top:32px;font-size:11px;color:#808080;line-height:1.5}@page{margin:16mm}</style></head>' +
+    '<body onload="setTimeout(function(){window.print()},400)">' +
+    '<img src="https://phenixleasing.com/logo.png" alt="Phenix Leasing" height="30" style="height:30px;width:auto"/>' +
+    '<h1>Cotización de leasing</h1>' +
+    '<div class="sub">Leasing con garantía en activos digitales · ' + fecha + (nombre ? ' · Para ' + czEsc(nombre) : '') + '</div>' +
+    '<table>' + filas.map(f => '<tr' + (f[2] ? ' class="fuerte"' : '') + '><td>' + czEsc(f[0]) + '</td><td>' + czEsc(f[1]) + '</td></tr>').join('') + '</table>' +
+    '<div class="pie">Phenix Leasing S.A. · Estimación no vinculante, sujeta a aprobación crediticia final. El IVA vigente (21%) se adiciona al canon.</div>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Habilitá las ventanas emergentes para descargar el PDF'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+async function czEnviarEmail() {
+  const c = czUltimaCotizacion;
+  const msg = document.getElementById('cz-compartir-msg');
+  const btn = document.getElementById('cz-enviar-btn');
+  if (!c) return;
+  const email = (document.getElementById('cz-cli-email').value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.style.color = '#b91c1c'; msg.textContent = 'Ingresá un email válido.'; return; }
+  if (!confirm('¿Enviar la cotización a ' + email + '?')) return;
+  btn.disabled = true; msg.style.color = 'var(--text3)'; msg.textContent = 'Enviando…';
+  try {
+    const { data, error } = await sbAdmin.functions.invoke('enviar-cotizacion', {
+      body: {
+        email, nombre: (document.getElementById('cz-cli-nombre').value || '').trim(),
+        lead_id: czBcraLeadId || null, enviado_por: (currentUser && currentUser.email) || null,
+        cotizacion: { valor_vehiculo: c.valorAuto, valor_financiar: c.valorFinanciar, plazo: c.plazo, garantia_pct: c.garantiaPct, deposito_garantia: c.deposito, canon_sin_iva: c.canon },
+      },
+    });
+    if (error || !data || !data.enviado) throw new Error((data && data.error) || (error && error.message) || 'No se pudo enviar');
+    msg.style.color = '#15803d'; msg.textContent = '✓ Enviada a ' + email + (czBcraLeadId ? ' y registrada en el historial del lead.' : '.');
+    showToast('✓ Cotización enviada');
+  } catch (e) {
+    msg.style.color = '#b91c1c'; msg.textContent = 'Error: ' + e.message;
+  } finally { btn.disabled = false; }
 }
 
 async function loadEscrows() {
