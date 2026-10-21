@@ -896,15 +896,19 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div>
         <div style="font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-0.3px">Cotizador</div>
-        <div style="font-size:13px;color:var(--text2);margin-top:2px">Cuota estimada por valor del auto, % de garantía y riesgo crediticio (score PI100)</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">Cuota estimada por valor a financiar (IVA incluido), % de garantía y riesgo crediticio (score PI100)</div>
       </div>
     </div>
 
     <div class="card" style="padding:24px;max-width:640px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
-          <label class="form-label">Valor del vehículo (USD)</label>
+          <label class="form-label">Valor del vehículo (USD) <span style="font-weight:400;color:var(--text3)">· solo referencia</span></label>
           <input class="form-input" type="number" id="cz-valor" min="0" placeholder="25000" oninput="calcularCuotaCotizador()"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor a financiar (USD, IVA incluido)</label>
+          <input class="form-input" type="number" id="cz-financiar" min="0" placeholder="25000" oninput="calcularCuotaCotizador()"/>
         </div>
         <div class="form-group">
           <label class="form-label">Garantía</label>
@@ -953,7 +957,8 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
         <div id="cz-cuota" style="font-family:var(--display);font-size:32px;font-weight:700;color:var(--accent)">—</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">Cuota sin IVA: <b id="cz-cuota-sin-iva">—</b></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;font-size:13px;color:var(--text2)">
-          <div>Monto a financiar: <b id="cz-capital">—</b></div>
+          <div>Monto a financiar (con IVA): <b id="cz-capital">—</b></div>
+          <div>Base de cálculo (sin IVA): <b id="cz-base">—</b></div>
           <div>Tasa anual aplicada: <b id="cz-tasa">—</b></div>
           <div>Depósito en garantía: <b id="cz-garantia-monto">—</b></div>
         </div>
@@ -3929,13 +3934,14 @@ function czTasaInterpolada(garantia, categoria) {
 }
 
 function calcularCuotaCotizador() {
-  const valorAuto = parseFloat(document.getElementById('cz-valor')?.value);
+  const valorAuto = parseFloat(document.getElementById('cz-valor')?.value); // solo referencia
+  const valorFinanciar = parseFloat(document.getElementById('cz-financiar')?.value); // IVA incluido
   const garantiaPct = parseFloat(document.getElementById('cz-garantia')?.value);
   const plazoMeses = parseInt(document.getElementById('cz-plazo')?.value);
   const resultado = document.getElementById('cz-resultado');
   if (!resultado) return;
 
-  if (!valorAuto || !garantiaPct || !plazoMeses || !czUltimoRiesgo) {
+  if (!valorFinanciar || !garantiaPct || !plazoMeses || !czUltimoRiesgo) {
     resultado.style.display = 'none';
     return;
   }
@@ -3944,6 +3950,7 @@ function calcularCuotaCotizador() {
     document.getElementById('cz-cuota').textContent = 'No califica';
     document.getElementById('cz-cuota-sin-iva').textContent = '—';
     document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-base').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
     document.getElementById('cz-garantia-monto').textContent = '—';
     return;
@@ -3956,6 +3963,7 @@ function calcularCuotaCotizador() {
     document.getElementById('cz-cuota').textContent = 'Garantía fuera de rango';
     document.getElementById('cz-cuota-sin-iva').textContent = '—';
     document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-base').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
     document.getElementById('cz-garantia-monto').textContent = '—';
     if (hint) hint.textContent = 'La garantía debe estar entre ' + gMin + '% y ' + gMax + '%.';
@@ -3971,26 +3979,31 @@ function calcularCuotaCotizador() {
     document.getElementById('cz-cuota').textContent = 'Tasa no configurada';
     document.getElementById('cz-cuota-sin-iva').textContent = '—';
     document.getElementById('cz-capital').textContent = '—';
+    document.getElementById('cz-base').textContent = '—';
     document.getElementById('cz-tasa').textContent = '—';
     document.getElementById('cz-garantia-monto').textContent = '—';
     return;
   }
 
-  // La garantía es un depósito reembolsable (se devuelve al finalizar el
-  // contrato, salvo incumplimientos); solo define la columna de riesgo/tasa,
-  // no reduce el capital financiado. El auto se financia por su valor total.
-  const capitalFinanciado = valorAuto;
-  const depositoGarantia = valorAuto * (garantiaPct / 100);
+  // El valor a financiar incluye IVA: se divide por 1,21 para obtener la base neta,
+  // sobre la base se calcula el canon (sin IVA) y al canon se le suma el 21% de IVA.
+  // El valor del vehículo es solo referencia y no interviene en la cuota.
+  // La garantía es un depósito reembolsable que solo define la columna de riesgo/tasa;
+  // su monto se informa sobre el valor del vehículo (o, si no se cargó, sobre el valor a financiar).
+  const IVA_PCT = 0.21;
+  const capitalFinanciado = valorFinanciar;
+  const baseSinIva = valorFinanciar / (1 + IVA_PCT);
+  const depositoGarantia = (valorAuto || valorFinanciar) * (garantiaPct / 100);
   const i = tasaAnual / 100 / 12;
   const n = plazoMeses;
-  const cuotaSinIva = i === 0 ? capitalFinanciado / n : capitalFinanciado * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
-  const IVA_PCT = 0.21; // el canon se cotiza sin IVA y se le adiciona el 21% vigente, como en el contrato
+  const cuotaSinIva = i === 0 ? baseSinIva / n : baseSinIva * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
   const cuotaConIva = cuotaSinIva * (1 + IVA_PCT);
 
   resultado.style.display = 'block';
   document.getElementById('cz-cuota').textContent = 'USD ' + cuotaConIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-cuota-sin-iva').textContent = 'USD ' + cuotaSinIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-capital').textContent = 'USD ' + capitalFinanciado.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  document.getElementById('cz-base').textContent = 'USD ' + baseSinIva.toLocaleString('es-AR', { maximumFractionDigits: 2 });
   document.getElementById('cz-tasa').textContent = (Math.round(tasaAnual * 100) / 100) + '%';
   document.getElementById('cz-garantia-monto').textContent = 'USD ' + depositoGarantia.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 }
