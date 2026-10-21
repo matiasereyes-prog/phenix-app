@@ -868,7 +868,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <div><label class="form-label">Mail de avisos</label><input class="field-input" type="email" id="wa-c-mail"/></div>
           <div style="display:flex;align-items:flex-end"><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="wa-c-habiles"/> Solo días hábiles</label></div>
         </div>
-        <div style="margin-top:16px"><label class="form-label">Mensajes de recordatorio (uno por recordatorio; separalos con una línea que diga ---; usá {nombre})</label>
+        <div style="margin-top:16px;display:none"><label class="form-label">Mensajes de recordatorio (uno por recordatorio; separalos con una línea que diga ---; usá {nombre})</label>
           <textarea class="field-input" id="wa-c-plantillas" rows="9" style="resize:vertical"></textarea></div>
         <div style="margin-top:14px"><button class="btn btn-dark" onclick="waGuardarCfg()">Guardar configuración</button> <span id="wa-c-msg" style="font-size:12px;margin-left:8px"></span></div>
       </div>
