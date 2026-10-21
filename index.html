@@ -857,6 +857,9 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <div class="card" style="padding:20px">
         <div style="font-weight:700;margin-bottom:12px">Recordatorios a leads sin contacto del equipo</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+          <div style="grid-column:1/-1"><label class="form-label">Canal de envío</label>
+            <select class="field-input" id="wa-c-canal"><option value="bot">Bot de WhatsApp Web (Grok)</option><option value="api">API oficial de WhatsApp Business</option></select>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">Solo un canal envía a la vez. Con la API oficial, fuera de las 24 h el mensaje sale con la plantilla aprobada y el enlace personal. Pausá los envíos antes de cambiar de canal.</div></div>
           <div><label class="form-label">Primer recordatorio (días)</label><input class="field-input" type="number" min="0" id="wa-c-primer"/></div>
           <div><label class="form-label">Días entre recordatorios</label><input class="field-input" type="number" min="1" id="wa-c-entre"/></div>
           <div><label class="form-label">Máx. recordatorios por lead</label><input class="field-input" type="number" min="0" id="wa-c-max"/></div>
@@ -4538,11 +4541,16 @@ async function loadWhatsApp() {
 function waRenderEstado() {
   if (!waCfg) return;
   const vivo = waCfg.bot_visto_at && (Date.now() - new Date(waCfg.bot_visto_at).getTime()) < 3 * 60 * 1000;
-  document.getElementById('wa-chip-bot').innerHTML = vivo
-    ? waChip('● BOT CONECTADO', '#e7f6ec', '#15803d', 'El bot consultó hace menos de 3 minutos')
-    : waChip('● BOT SIN CONEXIÓN', '#fef3f2', '#b42318', waCfg.bot_visto_at ? 'Última consulta: ' + waFecha(waCfg.bot_visto_at) : 'Todavía no se conectó');
+  const api = waCfg.canal === 'api';
+  document.getElementById('wa-chip-bot').innerHTML = api
+    ? (vivo
+      ? waChip('● API OFICIAL ACTIVA', '#e7f6ec', '#15803d', 'La API consultó la cola hace menos de 3 minutos')
+      : waChip('● API OFICIAL SIN ACTIVIDAD', '#fff7e6', '#b45309', waCfg.bot_visto_at ? 'Última consulta: ' + waFecha(waCfg.bot_visto_at) : 'Todavía no consultó la cola'))
+    : (vivo
+      ? waChip('● BOT CONECTADO', '#e7f6ec', '#15803d', 'El bot consultó hace menos de 3 minutos')
+      : waChip('● BOT SIN CONEXIÓN', '#fef3f2', '#b42318', waCfg.bot_visto_at ? 'Última consulta: ' + waFecha(waCfg.bot_visto_at) : 'Todavía no se conectó'));
   document.getElementById('wa-chip-activo').innerHTML = waCfg.activo ? waChip('ENVÍOS ACTIVOS', '#e7f6ec', '#15803d') : waChip('ENVÍOS PAUSADOS', '#f2f2f2', '#737373');
-  document.getElementById('wa-btn-switch').textContent = waCfg.activo ? 'Pausar bot' : 'Activar bot';
+  document.getElementById('wa-btn-switch').textContent = waCfg.activo ? 'Pausar envíos' : 'Activar envíos';
 }
 
 async function waToggleActivo() {
@@ -4772,6 +4780,7 @@ function waRenderCfg() {
   set('wa-c-pmin', waCfg.pausa_min_seg); set('wa-c-pmax', waCfg.pausa_max_seg);
   set('wa-c-mail', waCfg.aviso_email || ''); set('wa-c-plantillas', (waCfg.plantillas || []).join('\n---\n'));
   document.getElementById('wa-c-habiles').checked = !!waCfg.solo_habiles;
+  document.getElementById('wa-c-canal').value = waCfg.canal === 'api' ? 'api' : 'bot';
 }
 async function waGuardarCfg() {
   const n = id => parseInt(document.getElementById(id).value, 10);
@@ -4782,13 +4791,14 @@ async function waGuardarCfg() {
     dias_primer_recordatorio: n('wa-c-primer'), dias_entre_recordatorios: n('wa-c-entre'), max_recordatorios: n('wa-c-max'), max_por_dia: n('wa-c-dia'),
     hora_desde: n('wa-c-desde'), hora_hasta: n('wa-c-hasta'), pausa_min_seg: n('wa-c-pmin'), pausa_max_seg: n('wa-c-pmax'),
     aviso_email: document.getElementById('wa-c-mail').value.trim(), solo_habiles: document.getElementById('wa-c-habiles').checked,
+    canal: document.getElementById('wa-c-canal').value === 'api' ? 'api' : 'bot',
     plantillas, updated_at: new Date().toISOString(),
   };
   if (Object.values(cambios).some(v => typeof v === 'number' && isNaN(v))) { msg.textContent = 'Revisá los números.'; return; }
   if (cambios.pausa_max_seg < cambios.pausa_min_seg) { msg.textContent = 'La pausa máxima no puede ser menor que la mínima.'; return; }
   const { error } = await sbAdmin.from('wa_config').update(cambios).eq('id', 1);
   if (error) { msg.textContent = 'Error: ' + error.message; return; }
-  Object.assign(waCfg, cambios); msg.textContent = ''; showToast('✓ Configuración guardada');
+  Object.assign(waCfg, cambios); msg.textContent = ''; waRenderEstado(); showToast('✓ Configuración guardada');
 }
 async function waMostrarClave() {
   if (!waCfg) return;
