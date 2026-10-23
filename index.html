@@ -3877,24 +3877,32 @@ function renderInformePi100(d, meta) {
   const cheques = d.CHEQUES_RECHAZADOS === 'SI'
     ? '<b style="color:#dc2626">SI</b> · ' + n(d.CANTIDAD_CHEQUES_RECHAZADOS) + ' cheque(s) · ' + pesos(d.MONTO_CHEQUES_RECHAZADOS)
     : (d.CHEQUES_RECHAZADOS ? '<b style="color:#16a34a">NO</b>' : '—');
+  const esJur = /^(30|33|34)/.test(String(d.CUIL || ''));
+  const sub = [(esJur ? 'CUIT ' : 'CUIL ') + bcFmtCuit(d.CUIL)];
+  if (!esJur) { if (d.EDAD) sub.push(bcEsc(d.EDAD) + ' años'); if (d.NACIONALIDAD) sub.push(bcEsc(d.NACIONALIDAD)); }
+  const titulo = d.APENOM ? bcEsc(d.APENOM) : (esJur ? 'Persona jurídica' : '—');
+  const filasRes = [
+    fila('Ingreso estimado', pesos(d.DESDE) + ' a ' + pesos(d.HASTA) + ' <span style="color:#6b7280">(media ' + pesos(d.MEDIA) + ')</span>'),
+    esJur ? '' : fila('Ocupación', n(d.OCUPACION) + (d.MONOTRIBUTO && d.MONOTRIBUTO !== 'NO INSCRIPTO' ? ' · Monotributo ' + n(d.MONOTRIBUTO) : '')),
+    emp === '—' ? '' : fila('Empleadores', emp),
+    fila('Ganancias / IVA', n(d.IMP_GANANCIAS) + ' / ' + n(d.IMP_IVA)),
+    esJur && d.EMPLEADOR ? fila('Empleador (AFIP)', n(d.EMPLEADOR)) : '',
+    fila('Situación BCRA vigente', sitHtml + (d.ENTIDAD_BCRA_VIG ? ' · ' + n(d.ENTIDAD_BCRA_VIG) : '')),
+    fila('Deuda (máx. situación)', pesos(d.DEUDA_BCRA_MAX_VIG) + ' · ' + n(d.CANT_BAN_OPER) + ' entidad(es)'),
+    fila('Historial de situación', hist),
+    fila('Cheques rechazados', cheques)
+  ].join('');
   document.getElementById('cz-pi100-informe').innerHTML =
     '<div class="bc-card">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
         '<div><div style="font-size:12px;color:#6b7280">Informe PI100</div>' +
-        '<div style="font-size:20px;font-weight:700">' + n(d.APENOM) + '</div>' +
-        '<div style="font-size:13px;color:#6b7280">CUIL ' + bcFmtCuit(d.CUIL) + ' · ' + n(d.EDAD) + ' años · ' + n(d.NACIONALIDAD) + ' · Consultado ' + bcFechaHora(meta.consultado_at || new Date()) + (meta.desde_cache ? ' (informe guardado)' : '') + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
+        '<div style="font-size:20px;font-weight:700">' + titulo + '</div>' +
+        '<div style="font-size:13px;color:#6b7280">' + sub.join(' · ') + ' · Consultado ' + bcFechaHora(meta.consultado_at || new Date()) + (meta.desde_cache ? ' (informe guardado)' : '') + (d.FALLECIDO === 'SI' ? ' · <b style="color:#dc2626">FALLECIDO</b>' : '') + '</div></div>' +
         '<div style="text-align:right"><div style="font-size:12px;color:#6b7280">Score</div><div style="font-size:30px;font-weight:800;line-height:1">' + n(d.SCORE) + '</div>' +
         '<div style="font-size:12px;color:#6b7280;margin-top:4px">Rango PI100 <b>' + n(d.RANGO) + '</b> / 100</div></div>' +
       '</div>' +
       '<table style="width:100%;border-collapse:collapse;margin-top:12px;background:#f7f7f7;border-radius:8px">' +
-        fila('Ingreso estimado', pesos(d.DESDE) + ' a ' + pesos(d.HASTA) + ' <span style="color:#6b7280">(media ' + pesos(d.MEDIA) + ')</span>') +
-        fila('Ocupación', n(d.OCUPACION) + (d.MONOTRIBUTO && d.MONOTRIBUTO !== 'NO INSCRIPTO' ? ' · Monotributo ' + n(d.MONOTRIBUTO) : '')) +
-        fila('Empleadores', emp) +
-        fila('Ganancias / IVA', n(d.IMP_GANANCIAS) + ' / ' + n(d.IMP_IVA)) +
-        fila('Situación BCRA vigente', sitHtml + (d.ENTIDAD_BCRA_VIG ? ' · ' + n(d.ENTIDAD_BCRA_VIG) : '')) +
-        fila('Deuda (máx. situación)', pesos(d.DEUDA_BCRA_MAX_VIG) + ' · ' + n(d.CANT_BAN_OPER) + ' entidad(es)') +
-        fila('Historial de situación', hist) +
-        fila('Cheques rechazados', cheques) +
+        filasRes +
       '</table>' +
       pi100CuadrosHtml(d) +
       '<div class="pi-acciones" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="cz-pi100-detalle-btn" onclick="pi100ToggleDetalle()">Ver detalle completo</button><button class="btn btn-outline btn-sm" onclick="imprimirPi100()">Descargar PDF</button><button class="btn btn-outline btn-sm" onclick="consultarScorePi100({ forzar: true })">Actualizar (nueva consulta)</button></div>' +
