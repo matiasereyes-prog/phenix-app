@@ -4737,10 +4737,26 @@ function waFmtTel(num, key) {
   return k.length >= 8 ? '…' + k.slice(-8) : '';
 }
 
+// Reproduce una nota de voz guardada en el bucket privado wa-media (enlace firmado de 1 hora)
+async function waReproducirAudio(btn, path) {
+  btn.disabled = true; btn.textContent = 'Cargando…';
+  try {
+    const { data, error } = await sbAdmin.storage.from('wa-media').createSignedUrl(path, 3600);
+    if (error || !data || !data.signedUrl) throw new Error(error ? error.message : 'sin enlace');
+    const a = document.createElement('audio');
+    a.controls = true; a.autoplay = true; a.src = data.signedUrl; a.style.cssText = 'width:100%;max-width:260px';
+    const dl = document.createElement('a');
+    dl.href = data.signedUrl; dl.target = '_blank'; dl.rel = 'noopener'; dl.textContent = 'Descargar'; dl.style.cssText = 'display:block;font-size:11px;margin-top:2px';
+    btn.parentNode.replaceChildren(a, dl);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '⚠ No se pudo cargar, reintentar';
+  }
+}
+
 function waHiloHtml(f, i) {
   const msgs = (waMsgs[f.g] || []).slice().reverse();
   let h = '<div style="background:var(--gray);border-radius:10px;padding:10px;max-height:320px;overflow-y:auto">' + (msgs.length ? msgs.map(m =>
-    '<div style="display:flex;justify-content:' + (m.direccion === 'in' ? 'flex-start' : 'flex-end') + ';margin-bottom:6px"><div style="max-width:75%;background:' + (m.direccion === 'in' ? '#fff' : '#dcf8c6') + ';border-radius:10px;padding:7px 10px;font-size:13px;white-space:pre-wrap">' + waH(m.cuerpo) +
+    '<div style="display:flex;justify-content:' + (m.direccion === 'in' ? 'flex-start' : 'flex-end') + ';margin-bottom:6px"><div style="max-width:75%;background:' + (m.direccion === 'in' ? '#fff' : '#dcf8c6') + ';border-radius:10px;padding:7px 10px;font-size:13px;white-space:pre-wrap">' + waH(m.cuerpo) + (m.media_path ? '<div style="margin-top:6px"><button class="btn btn-outline btn-sm" onclick="waReproducirAudio(this,\'' + waH(m.media_path) + '\')">▶ Escuchar audio</button></div>' : '') +
     '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + waFecha(m.created_at) + (m.direccion === 'out' ? ' · ' + waH(m.origen) : '') + '</div></div></div>').join('') : '<div style="font-size:12px;color:var(--text3)">Sin mensajes.</div>') + '</div>';
   if (f.c) {
     const k = f.c.telefono_key;
