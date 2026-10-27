@@ -1377,7 +1377,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
       <button onclick="closeModal('modal-detalle-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
     </div>
     <div class="detail-grid" id="lead-grid"></div>
-    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" onclick="consultarBcraDesdeLead()">Consultar BCRA</button><button class="btn btn-outline btn-sm" onclick="consultarScoreDesdeLead()">Consultar score e informe</button></div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" onclick="consultarBcraDesdeLead()">Consultar BCRA</button><button class="btn btn-outline btn-sm" onclick="consultarScoreDesdeLead()">Consultar score e informe</button><button class="btn btn-outline btn-sm" id="btn-lead-chat" onclick="verChatLead()">💬 Ver chat de WhatsApp</button></div>
     <div id="lead-dups" style="margin-top:16px"></div>
     <div id="lead-datos" style="margin-top:16px"></div>
     <div class="form-group" style="margin-top:16px">
@@ -2561,7 +2561,7 @@ function showView(view) {
   if (view === 'blockchain') initBlockchainTab();
   if (view === 'escrows') loadEscrows();
   if (view === 'cotizador') loadConfigCotizador();
-  if (view === 'whatsapp') loadWhatsApp();
+  if (view === 'whatsapp') return loadWhatsApp();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -5101,10 +5101,26 @@ function abrirDetalleLead(id) {
     ['Auto de interés', l.auto_interes||'—'], ['Monto estimado', l.monto_estimado||'—'],
     ['Canal', l.canal||'landing'], ['Fecha', formatFecha(l.created_at?.split('T')[0])],
   ].map(([k,v]) => `<div><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`).join('');
+  const btnChat = document.getElementById('btn-lead-chat');
+  if (btnChat) { btnChat.disabled = !waKey(l.telefono); btnChat.title = waKey(l.telefono) ? '' : 'El lead no tiene teléfono cargado'; }
   openModal('modal-detalle-lead');
   loadHistorialLead(currentLeadId);
   mostrarDuplicadosLead(currentLeadId);
   loadDatosLead(currentLeadId);
+}
+
+// Abre la conversación de WhatsApp del lead (misma clave de teléfono que usa la pantalla de WhatsApp)
+async function verChatLead() {
+  const l = allLeads.find(x => x.id === currentLeadId);
+  const k = l && waKey(l.telefono);
+  if (!k) { showToast('El lead no tiene teléfono cargado'); return; }
+  closeModal('modal-detalle-lead');
+  await showView('whatsapp');
+  if (!waMsgs[k] && !waContactos.some(c => c.telefono_key === k)) {
+    showToast('Todavía no hay conversación de WhatsApp con ' + (l.nombre || 'este lead'));
+    return;
+  }
+  waChatear(k);
 }
 
 async function actualizarLead() {
