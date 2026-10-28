@@ -524,6 +524,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <option value="3+">3 o más</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer"><input type="checkbox" id="filter-lead-dup" onchange="filterLeads()"/> Solo duplicados</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer" title="Leads sin ningún registro del equipo en los últimos 3 días (no cuentan mensajes automáticos ni del cliente)"><input type="checkbox" id="filter-lead-sc" onchange="filterLeads()"/> Sin contacto 3+ días</label>
       </div>
       <div class="card">
         <div style="overflow-x:auto">
@@ -1477,10 +1478,30 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
 
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-detalle-lead')">Cerrar</button>
+      <button class="btn btn-outline" id="btn-seguimiento-lead" onclick="abrirSeguimientoLead(currentLeadId)">✉ Mail de seguimiento</button>
       <button class="btn btn-outline" id="btn-convertir-lead" onclick="convertirLeadACliente()" style="color:var(--green);border-color:var(--green)">✓ Convertir a cliente</button>
       <button class="btn btn-dark" onclick="actualizarLead()">Guardar cambios</button>
     </div>
     <div id="lead-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: MAIL DE SEGUIMIENTO A UN LEAD ══════════════════════ -->
+<div class="modal-overlay" id="modal-seguimiento-lead">
+  <div class="modal-card" style="max-width:600px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+      <div class="modal-title">Mail de seguimiento</div>
+      <button onclick="closeModal('modal-seguimiento-lead')" style="background:var(--gray);border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;color:var(--text3)">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Para</label><input class="form-input" id="sg-para" readonly/></div>
+    <div class="form-group"><label class="form-label">Asunto</label><input class="form-input" id="sg-asunto" maxlength="150"/></div>
+    <div class="form-group"><label class="form-label">Mensaje (los párrafos se separan con una línea en blanco)</label><textarea class="form-input" id="sg-mensaje" rows="8" maxlength="2000" style="resize:vertical"></textarea></div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Después del mensaje el mail incluye la lista de datos que pedimos y el botón "Completar mis datos" con el link del cliente. Las respuestas llegan a leasing@phenix.com.ar.</div>
+    <div id="sg-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-seguimiento-lead')">Cancelar</button>
+      <button class="btn btn-dark" id="sg-enviar" onclick="enviarSeguimientoLead()">Enviar mail</button>
+    </div>
   </div>
 </div>
 
@@ -2289,6 +2310,7 @@ let allLeads = [];
 let currentLeaseId = null;
 let currentLeadId = null;
 let leadsDuplicados = {};
+let leadsUltAct = {}; // lead_id -> fecha del último registro del equipo
 let leadsActividades = {}; // lead_id -> cantidad de actividades del equipo (sin mail automático ni acciones del cliente)
 
 // ══════════════════════════════════════════════════════════════════
@@ -2636,6 +2658,7 @@ async function irALeadsNuevos() {
   document.getElementById('filter-lead-estado').value = 'nuevo';
   document.getElementById('filter-lead-canal').value = '';
   document.getElementById('filter-lead-dup').checked = false;
+  document.getElementById('filter-lead-sc').checked = false;
   document.getElementById('filter-lead-form').value = '';
   document.getElementById('filter-lead-act').value = '';
   filterLeads();
@@ -5004,19 +5027,76 @@ async function loadLeads() {
 
 // Actividades = registros del historial hechos por el equipo. No cuentan el mail automático ni lo que hace el cliente.
 async function cargarActividadesLeads() {
-  const cuentas = {};
+  const cuentas = {}, ultimas = {};
   try {
     for (let desde = 0; ; desde += 1000) {
-      const { data, error } = await sbAdmin.from('leads_historial').select('lead_id, responsable')
+      const { data, error } = await sbAdmin.from('leads_historial').select('lead_id, responsable, created_at')
         .order('created_at', { ascending: true }).range(desde, desde + 999);
       if (error || !data) break;
-      data.forEach(h => { if (h.responsable !== 'Automático' && h.responsable !== 'Cliente' && h.responsable !== 'Bot') cuentas[h.lead_id] = (cuentas[h.lead_id] || 0) + 1; });
+      data.forEach(h => { if (h.responsable !== 'Automático' && h.responsable !== 'Cliente' && h.responsable !== 'Bot') { cuentas[h.lead_id] = (cuentas[h.lead_id] || 0) + 1; ultimas[h.lead_id] = h.created_at; } });
       if (data.length < 1000) break;
     }
   } catch (e) { console.error('cargarActividadesLeads', e); }
   leadsActividades = cuentas;
+  leadsUltAct = ultimas;
 }
 function actividadesLead(l) { return leadsActividades[l.id] || 0; }
+// Días sin contacto del equipo (null si no corresponde marcarlo): 3 o más, desde el último registro del equipo o desde que se creó el lead
+function diasSinContacto(l) {
+  if (l.estado === 'convertido' || l.estado === 'rechazado') return null;
+  const base = leadsUltAct[l.id] || l.created_at;
+  if (!base) return null;
+  const d = Math.floor((Date.now() - new Date(base).getTime()) / 86400000);
+  return d >= 3 ? d : null;
+}
+function badgeSinContacto(l) {
+  const d = diasSinContacto(l);
+  return d === null ? '' : ' <span title="Sin ningún registro del equipo desde hace ' + d + ' días" style="display:inline-block;font-size:10px;font-weight:700;background:#fff1e0;color:#c2410c;border-radius:6px;padding:2px 6px;margin-left:4px">⏰ ' + d + 'd sin contacto</span>';
+}
+const _mailLeadOk = e => !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+let seguimientoLeadId = null;
+function abrirSeguimientoLead(id) {
+  const l = allLeads.find(x => x.id === id);
+  if (!l) return;
+  if (!_mailLeadOk(l.email)) { showToast('Este lead no tiene un email válido'); return; }
+  seguimientoLeadId = id;
+  const nombre = String(l.nombre || '').trim().split(/\s+/)[0] || '';
+  document.getElementById('sg-para').value = l.email;
+  document.getElementById('sg-asunto').value = 'Seguimiento de tu consulta de leasing con garantía en activos digitales';
+  document.getElementById('sg-mensaje').value = 'Hola' + (nombre ? ' ' + nombre : '') + ', te escribimos de Phenix Leasing por la consulta que hiciste sobre leasing con garantía en activos digitales.\n\nTodavía no recibimos tus datos y queremos avanzar con tu propuesta. Para armarla, necesitamos que nos cuentes:';
+  document.getElementById('sg-msg').innerHTML = '';
+  document.getElementById('sg-enviar').disabled = false; document.getElementById('sg-enviar').textContent = 'Enviar mail';
+  openModal('modal-seguimiento-lead');
+}
+async function enviarSeguimientoLead() {
+  const id = seguimientoLeadId;
+  const btn = document.getElementById('sg-enviar'), msg = document.getElementById('sg-msg');
+  const asunto = document.getElementById('sg-asunto').value.trim(), mensaje = document.getElementById('sg-mensaje').value.trim();
+  if (!asunto || !mensaje) { msg.innerHTML = '<div class="alert alert-error">Completá el asunto y el mensaje.</div>'; return; }
+  btn.disabled = true; btn.textContent = 'Enviando…'; msg.innerHTML = '';
+  try {
+    const { data, error } = await sbAdmin.functions.invoke('enviar-seguimiento-mail', {
+      body: { lead_id: id, asunto, mensaje, consultado_por: (currentUser && currentUser.email) || null }
+    });
+    if (error) {
+      let m = error.message;
+      try { const j = await error.context.json(); m = j.error || m; } catch (e) {}
+      throw new Error(m);
+    }
+    if (!data || !data.ok) throw new Error((data && data.error) || 'No se pudo enviar el mail.');
+    showToast('✓ Mail enviado a ' + data.enviado_a);
+    leadsUltAct[id] = new Date().toISOString();
+    leadsActividades[id] = (leadsActividades[id] || 0) + 1;
+    closeModal('modal-seguimiento-lead');
+    filterLeads();
+    if (currentLeadId === id) loadHistorialLead(id);
+  } catch (e) {
+    msg.innerHTML = '<div class="alert alert-error">' + (e.message || 'Error al enviar').replace(/</g, '&lt;') + '</div>';
+    btn.disabled = false; btn.textContent = 'Enviar mail';
+  }
+}
+
 function leadSinActividad(l) { return actividadesLead(l) === 0 && l.estado !== 'convertido' && l.estado !== 'rechazado'; }
 
 // Duplicados: mismo email, o mismo teléfono (últimos 10 dígitos)
@@ -5058,7 +5138,8 @@ function filterLeads() {
     const act = document.getElementById('filter-lead-act').value;
     const n = actividadesLead(l);
     const matchAct = !act || (act === '3+' ? n >= 3 : n === Number(act));
-    return matchQ && matchEstado && matchCanal && matchDup && matchForm && matchAct;
+    const matchSC = !document.getElementById('filter-lead-sc').checked || diasSinContacto(l) !== null;
+    return matchQ && matchEstado && matchCanal && matchDup && matchForm && matchAct && matchSC;
   });
   renderLeadsTable(filtered);
 }
@@ -5067,7 +5148,7 @@ function renderLeadsTable(data) {
   const tbody = document.getElementById('tbody-leads');
   if (!data || !data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📬</div><div class="empty-text">Sin leads registrados.</div></div></td></tr>`; return; }
   tbody.innerHTML = data.map(l => '<tr onclick="abrirDetalleLead(\'' + l.id + '\')"' + (leadSinActividad(l) ? ' style="background:#e7f6ec" title="Sin actividades del equipo todavía"' : '') + '>' +
-    '<td class="bold">' + l.nombre + (l.datos_completados_at
+    '<td class="bold">' + l.nombre + badgeSinContacto(l) + (l.datos_completados_at
       ? ' <span title="El cliente completó el formulario de datos" style="display:inline-block;font-size:10px;font-weight:700;background:#e7f6ec;color:#15803d;border-radius:6px;padding:2px 6px;margin-left:4px">✓ DATOS</span>'
       : (l.datos_solicitados_at ? ' <span title="Se pidió el formulario por mail y todavía no lo completó" style="display:inline-block;font-size:10px;font-weight:700;background:#f2f2f2;color:#737373;border-radius:6px;padding:2px 6px;margin-left:4px">DATOS PENDIENTES</span>' : '')) + (leadsDuplicados[l.id] ? ' <span title="Hay otro lead con el mismo email o teléfono" style="display:inline-block;font-size:10px;font-weight:700;background:#fff4e5;color:#b45309;border-radius:6px;padding:2px 6px;margin-left:4px">DUPLICADO</span>' : '') + '</td>' +
     '<td class="mono" style="font-size:12px">' + l.email + '</td>' +
@@ -5081,7 +5162,7 @@ function renderLeadsTable(data) {
     '<td style="font-size:12px;color:var(--text2)">' + (l.proxima_accion||'—') + '</td>' +
     '<td style="text-align:center"><span style="display:inline-block;min-width:22px;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;' + (actividadesLead(l) ? 'background:#f2f2f2;color:#404040' : 'background:#bbf7d0;color:#15803d') + '">' + actividadesLead(l) + '</span></td>' +
     '<td>' + leadBadge(l.estado) + '</td>' +
-    '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLead(\'' + l.id + '\')">→</button></td>' +
+    '<td style="white-space:nowrap">' + (diasSinContacto(l) !== null && _mailLeadOk(l.email) ? '<button class="btn btn-outline btn-sm" title="Enviar mail de seguimiento" onclick="event.stopPropagation();abrirSeguimientoLead(\'' + l.id + '\')">✉</button> ' : '') + '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrirDetalleLead(\'' + l.id + '\')">→</button></td>' +
     '</tr>').join('');
 }
 
@@ -5722,6 +5803,7 @@ async function guardarContacto() {
   toggleNuevoContacto();
   loadHistorialLead(currentLeadId);
   leadsActividades[currentLeadId] = (leadsActividades[currentLeadId] || 0) + 1;
+  leadsUltAct[currentLeadId] = new Date().toISOString();
   filterLeads();
 
   // Actualizar estado del lead según resultado
