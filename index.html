@@ -408,6 +408,24 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
           <div class="kpi-sub">requieren atención</div>
         </div>
       </div>
+      <!-- Estadísticas de leads -->
+      <div class="card" id="ls-card" style="margin-bottom:24px">
+        <div class="card-header" style="flex-wrap:wrap;gap:10px">
+          <div class="card-title">Estadísticas de leads</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select class="filter-select" id="ls-f-per" onchange="lsRender()" title="Fecha de alta del lead">
+              <option value="">Todo el período</option><option value="hoy">Hoy</option><option value="7">Últimos 7 días</option><option value="30">Últimos 30 días</option><option value="mes">Este mes</option><option value="90">Últimos 90 días</option>
+            </select>
+            <select class="filter-select" id="ls-f-canal" onchange="lsRender()"><option value="">Todos los canales</option><option value="landing">Landing</option><option value="whatsapp">WhatsApp</option></select>
+            <select class="filter-select" id="ls-f-estado" onchange="lsRender()"><option value="">Todos los estados</option><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="calificado">Calificado</option><option value="cotizado">Cotizado</option><option value="convertido">Convertido</option><option value="rechazado">Rechazado</option></select>
+            <select class="filter-select" id="ls-f-tipo" onchange="lsRender()"><option value="">Todo tipo de cliente</option><option value="fisica">Persona física</option><option value="juridica">Persona jurídica</option><option value="sin_dato">Sin dato</option></select>
+            <select class="filter-select" id="ls-f-resp" onchange="lsRender()"><option value="">Todos los responsables</option></select>
+            <button class="btn btn-outline btn-sm" onclick="lsLimpiar()">Limpiar</button>
+          </div>
+        </div>
+        <div id="ls-cards" style="padding:4px 20px 8px"></div>
+        <div id="ls-detalle" style="padding:0 20px 20px"></div>
+      </div>
       <div class="card">
         <div class="card-header">
           <div class="card-title">Últimos leasings</div>
@@ -2602,7 +2620,179 @@ async function loadDashboard() {
   document.getElementById('kpi-leads').textContent = leads || 0;
   document.getElementById('kpi-vencidas').textContent = vencidas || 0;
   renderLeasingsTable('tbody-dash', ultimos || [], true);
+  cargarEstadisticasLeads();
 }
+
+// ═════════════════════════════════════════════════════════════════
+// DASHBOARD: ESTADÍSTICAS DE LEADS
+// "Contacto del equipo" = registros del historial de una persona del equipo (no cuenta lo automático, del bot ni del cliente).
+// ═════════════════════════════════════════════════════════════════
+let lsBase = [];      // leads enriquecidos
+let lsSel = null;     // tarjeta seleccionada
+const lsTel = t => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : ''; };
+const lsRespuesta = l => !!(l.wc && l.wc.ultimo_entrante_at) || l.e.waCli > 0;
+const lsEscribimos = l => (l.e.mailAuto + l.e.mailMan + l.e.waAuto + l.e.waMan) > 0 || !!(l.wc && l.wc.ultimo_saliente_at);
+function lsDias(l) {
+  if (l.estado === 'convertido' || l.estado === 'rechazado') return null;
+  const base = l.e.ult || l.created_at;
+  const d = Math.floor((Date.now() - new Date(base).getTime()) / 86400000);
+  return d >= 3 ? d : null;
+}
+const LS_GRUPOS = [
+  ['Contacto', [
+    ['total', 'Total de leads', l => true],
+    ['con_contacto', 'Con contacto del equipo', l => l.e.act > 0],
+    ['sin_contacto', 'Sin contacto del equipo', l => l.e.act === 0],
+    ['sc3', 'Sin contacto 3+ días', l => lsDias(l) !== null, '#c2410c'],
+    ['atencion', 'Escribieron y esperan respuesta', l => !!(l.wc && l.wc.requiere_atencion), '#c2410c'],
+  ]],
+  ['Respuesta del cliente', [
+    ['resp_wa', 'Respondieron por WhatsApp', l => lsRespuesta(l), '#15803d'],
+    ['sin_resp', 'Sin respuesta (les escribimos y no contestaron ni completaron el formulario)', l => lsEscribimos(l) && !lsRespuesta(l) && !l.datos_completados_at, '#b42318'],
+    ['no_molestar', 'Pidieron no recibir mensajes', l => !!(l.wc && l.wc.no_molestar)],
+  ]],
+  ['Formulario de datos', [
+    ['form_ok', 'Formulario completo', l => !!l.datos_completados_at, '#15803d'],
+    ['form_pend', 'Formulario pendiente', l => !!l.datos_solicitados_at && !l.datos_completados_at],
+    ['form_sin', 'Formulario sin solicitar', l => !l.datos_solicitados_at && !l.datos_completados_at],
+  ]],
+  ['Tipo de cliente', [
+    ['t_fisica', 'Persona física', l => l.tipoP === 'fisica'],
+    ['t_juridica', 'Persona jurídica', l => l.tipoP === 'juridica'],
+    ['t_sin', 'Sin dato (no completó el formulario)', l => !l.tipoP],
+  ]],
+  ['Mails', [
+    ['mail_auto', 'Con mail automático enviado', l => l.e.mailAuto > 0],
+    ['mail_equipo', 'Con mail del equipo', l => l.e.mailMan > 0],
+    ['mail_ninguno', 'Sin ningún mail', l => l.e.mailAuto + l.e.mailMan === 0],
+  ]],
+  ['WhatsApp', [
+    ['wa_auto', 'Con recordatorio automático', l => l.e.waAuto > 0 || (l.wc && l.wc.recordatorios_enviados > 0)],
+    ['wa_r1', '1 recordatorio enviado', l => !!(l.wc && l.wc.recordatorios_enviados === 1)],
+    ['wa_r2', '2 recordatorios enviados', l => !!(l.wc && l.wc.recordatorios_enviados === 2)],
+    ['wa_r3', '3 recordatorios enviados', l => !!(l.wc && l.wc.recordatorios_enviados >= 3)],
+    ['wa_equipo', 'Con mensaje del equipo', l => l.e.waMan > 0],
+    ['wa_ninguno', 'Sin ningún WhatsApp enviado', l => !lsEscribimos(l) || (l.e.waAuto + l.e.waMan === 0 && !(l.wc && l.wc.ultimo_saliente_at))],
+  ]],
+  ['Avance comercial', [
+    ['cotizacion', 'Con cotización', l => l.e.cotiz || l.estado === 'cotizado' || l.estado === 'convertido'],
+    ['informe', 'Con informe crediticio', l => l.e.informe],
+    ['e_nuevo', 'Estado: nuevo', l => l.estado === 'nuevo'],
+    ['e_contactado', 'Estado: contactado', l => l.estado === 'contactado'],
+    ['e_calificado', 'Estado: calificado', l => l.estado === 'calificado'],
+    ['e_cotizado', 'Estado: cotizado', l => l.estado === 'cotizado'],
+    ['e_convertido', 'Estado: convertido', l => l.estado === 'convertido', '#15803d'],
+    ['e_rechazado', 'Estado: rechazado', l => l.estado === 'rechazado'],
+  ]],
+];
+
+async function cargarEstadisticasLeads() {
+  const cont = document.getElementById('ls-cards');
+  if (!cont) return;
+  cont.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:13px">Cargando estadísticas…</div>';
+  try {
+    const [rl, rd, rw] = await Promise.all([
+      sbAdmin.from('leads').select('id, nombre, email, telefono, canal, estado, created_at, datos_solicitados_at, datos_completados_at, responsable').order('created_at', { ascending: false }).limit(5000),
+      sbAdmin.from('leads_datos').select('lead_id, tipo_persona'),
+      sbAdmin.from('wa_contactos').select('telefono_key, ultimo_entrante_at, ultimo_saliente_at, recordatorios_enviados, requiere_atencion, no_molestar'),
+    ]);
+    if (rl.error) throw new Error(rl.error.message);
+    const hist = {};
+    for (let desde = 0; ; desde += 1000) {
+      const { data, error } = await sbAdmin.from('leads_historial').select('lead_id, tipo, descripcion, responsable, created_at')
+        .order('created_at', { ascending: true }).range(desde, desde + 999);
+      if (error || !data) break;
+      data.forEach(h => {
+        const e = hist[h.lead_id] || (hist[h.lead_id] = { act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false });
+        const r = h.responsable, d = String(h.descripcion || '');
+        const equipo = r !== 'Automático' && r !== 'Cliente' && r !== 'Bot';
+        if (equipo) { e.act++; e.ult = h.created_at; }
+        if (h.tipo === 'email') { if (r === 'Automático') e.mailAuto++; else e.mailMan++; }
+        if (h.tipo === 'whatsapp') { if (r === 'Cliente') e.waCli++; else if (r === 'Bot') e.waAuto++; else e.waMan++; }
+        if (/cotizaci[oó]n enviada|se envi[oó] cotizaci[oó]n/i.test(d)) e.cotiz = true;
+        if (/informe crediticio/i.test(d)) e.informe = true;
+      });
+      if (data.length < 1000) break;
+    }
+    const tipos = {}; (rd.data || []).forEach(x => { tipos[x.lead_id] = x.tipo_persona; });
+    const wcs = {}; (rw.data || []).forEach(x => { wcs[x.telefono_key] = x; });
+    const vacio = () => ({ act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false });
+    lsBase = (rl.data || []).map(l => ({ ...l, e: hist[l.id] || vacio(), wc: wcs[lsTel(l.telefono)] || null, tipoP: tipos[l.id] || null }));
+    const sel = document.getElementById('ls-f-resp');
+    const actual = sel.value;
+    const resp = [...new Set(lsBase.map(l => l.responsable).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">Todos los responsables</option>' + resp.map(r => '<option value="' + bcEsc(r) + '">' + bcEsc(r) + '</option>').join('');
+    sel.value = actual;
+    lsRender();
+  } catch (e) {
+    cont.innerHTML = '<div style="padding:16px;color:#b42318;font-size:13px">No se pudieron cargar las estadísticas: ' + bcEsc(e.message || 'error') + '</div>';
+  }
+}
+
+function lsFiltrados() {
+  const per = document.getElementById('ls-f-per').value, canal = document.getElementById('ls-f-canal').value;
+  const estado = document.getElementById('ls-f-estado').value, tipo = document.getElementById('ls-f-tipo').value, resp = document.getElementById('ls-f-resp').value;
+  let desde = null;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  if (per === 'hoy') desde = hoy;
+  else if (per === 'mes') desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  else if (per) desde = new Date(hoy.getTime() - Number(per) * 86400000);
+  return lsBase.filter(l =>
+    (!desde || new Date(l.created_at) >= desde) &&
+    (!canal || (l.canal || 'landing') === canal) &&
+    (!estado || l.estado === estado) &&
+    (!tipo || (tipo === 'sin_dato' ? !l.tipoP : l.tipoP === tipo)) &&
+    (!resp || l.responsable === resp));
+}
+
+function lsRender() {
+  const cont = document.getElementById('ls-cards');
+  if (!cont) return;
+  const base = lsFiltrados(), total = base.length;
+  cont.innerHTML = LS_GRUPOS.map(([titulo, items]) =>
+    '<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">' + titulo + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">' +
+    items.map(([k, label, fn, color]) => {
+      const n = base.filter(fn).length;
+      const on = lsSel === k;
+      return '<div onclick="lsElegir(\'' + k + '\')" style="cursor:pointer;border:1.5px solid ' + (on ? 'var(--black)' : 'var(--border)') + ';background:' + (on ? 'var(--gray)' : 'var(--white)') + ';border-radius:10px;padding:12px">' +
+        '<div style="font-size:24px;font-weight:800;line-height:1;color:' + (color || 'var(--black)') + '">' + n + '</div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.3">' + label + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + (total ? Math.round(n * 100 / total) : 0) + '% del total</div></div>';
+    }).join('') + '</div>').join('');
+  lsDetalle(base);
+}
+
+function lsElegir(k) { lsSel = (lsSel === k) ? null : k; lsRender(); if (lsSel) document.getElementById('ls-detalle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+function lsLimpiar() {
+  ['ls-f-per', 'ls-f-canal', 'ls-f-estado', 'ls-f-tipo', 'ls-f-resp'].forEach(id => { document.getElementById(id).value = ''; });
+  lsSel = null; lsRender();
+}
+
+function lsDetalle(base) {
+  const box = document.getElementById('ls-detalle');
+  if (!lsSel) { box.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-top:12px">Tocá una tarjeta para ver los leads que la componen.</div>'; return; }
+  let def = null;
+  LS_GRUPOS.forEach(([, items]) => items.forEach(it => { if (it[0] === lsSel) def = it; }));
+  if (!def) { box.innerHTML = ''; return; }
+  const rows = base.filter(def[2]);
+  const fmt = iso => iso ? new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
+  const form = l => l.datos_completados_at ? '✓ Completo' : (l.datos_solicitados_at ? 'Pendiente' : 'Sin solicitar');
+  box.innerHTML = '<div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="font-weight:700">' + def[1] + ' · ' + rows.length + '</div>' +
+    '<button class="btn btn-outline btn-sm" onclick="lsElegir(lsSel)">Cerrar lista</button></div>' +
+    (rows.length ? '<div style="overflow-x:auto;margin-top:8px"><table class="data-table"><thead><tr><th>Nombre</th><th>Contacto</th><th>Alta</th><th>Estado</th><th>Formulario</th><th>Último contacto del equipo</th><th></th></tr></thead><tbody>' +
+      rows.slice(0, 300).map(l => '<tr onclick="lsAbrirLead(\'' + l.id + '\')" style="cursor:pointer"><td class="bold">' + bcEsc(l.nombre) + '</td>' +
+        '<td style="font-size:12px">' + bcEsc(l.email || '') + '<br>' + bcEsc(l.telefono || '') + '</td>' +
+        '<td class="mono" style="font-size:12px">' + fmt(l.created_at) + '</td><td>' + leadBadge(l.estado) + '</td>' +
+        '<td style="font-size:12px">' + form(l) + '</td><td class="mono" style="font-size:12px">' + (l.e.ult ? fmt(l.e.ult) : 'Nunca') + '</td>' +
+        '<td style="white-space:nowrap">' + (_mailLeadOk(l.email) ? '<button class="btn btn-outline btn-sm" title="Enviar mail de seguimiento" onclick="event.stopPropagation();lsMailLead(\'' + l.id + '\')">✉</button> ' : '') + '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();lsAbrirLead(\'' + l.id + '\')">→</button></td></tr>').join('') +
+      '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:var(--text3);margin-top:6px">Se muestran los primeros 300.</div>' : '')
+      : '<div style="font-size:13px;color:var(--text3);margin-top:10px">Ningún lead cumple este filtro.</div>');
+}
+
+async function lsAbrirLead(id) { if (!allLeads.some(x => x.id === id)) await loadLeads(); abrirDetalleLead(id); }
+async function lsMailLead(id) { if (!allLeads.some(x => x.id === id)) await loadLeads(); abrirSeguimientoLead(id); }
+
 
 // ══════════════════════════════════════════════════════════════════
 // LEASINGS
