@@ -423,6 +423,7 @@ body{font-family:var(--sans);background:var(--gray);color:var(--black);min-heigh
             <button class="btn btn-outline btn-sm" onclick="lsLimpiar()">Limpiar</button>
           </div>
         </div>
+        <div id="ls-graficos" style="padding:6px 20px 0"></div>
         <div id="ls-cards" style="padding:4px 20px 8px"></div>
         <div id="ls-detalle" style="padding:0 20px 20px"></div>
       </div>
@@ -2761,6 +2762,7 @@ function lsRender() {
         '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + (total ? Math.round(n * 100 / total) : 0) + '% del total</div></div>';
     }).join('') + '</div>').join('');
   lsDetalle(base);
+  lsGraficos(base);
 }
 
 function lsElegir(k) { lsSel = (lsSel === k) ? null : k; lsRender(); if (lsSel) document.getElementById('ls-detalle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
@@ -2788,6 +2790,169 @@ function lsDetalle(base) {
         '<td style="white-space:nowrap">' + (_mailLeadOk(l.email) ? '<button class="btn btn-outline btn-sm" title="Enviar mail de seguimiento" onclick="event.stopPropagation();lsMailLead(\'' + l.id + '\')">✉</button> ' : '') + '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();lsAbrirLead(\'' + l.id + '\')">→</button></td></tr>').join('') +
       '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:var(--text3);margin-top:6px">Se muestran los primeros 300.</div>' : '')
       : '<div style="font-size:13px;color:var(--text3);margin-top:10px">Ningún lead cumple este filtro.</div>');
+}
+
+// ── Gráficos del dashboard de leads (Chart.js, se carga bajo demanda) ──
+const LS_C = { azul: '#2a78d6', naranja: '#eb6834', aqua: '#1baf7a', gris: '#b5b5b5', tinta: '#404040', suave: '#737373', grilla: '#ececec' };
+const LS_SEC = ['#d6e6fa', '#b3d0f5', '#8bb8ee', '#5f9be3', '#2a78d6', '#1c58a3'];   // una sola tonalidad, de claro a oscuro
+let lsCharts = {}, lsTok = 0;
+// Etiqueta de valor al final de cada barra (sin librerías extra)
+const lsValores = {
+  id: 'lsValores',
+  afterDatasetsDraw(chart) {
+    const horiz = chart.options.indexAxis === 'y', ctx = chart.ctx;
+    ctx.save(); ctx.font = '600 11px Urbanist, Arial, sans-serif'; ctx.fillStyle = LS_C.tinta;
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i); if (meta.hidden) return;
+      meta.data.forEach((el, j) => {
+        const t = ds.lsFmt ? ds.lsFmt[j] : String(ds.data[j]);
+        if (horiz) { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(t, el.x + 6, el.y); }
+        else { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(t, el.x, el.y - 4); }
+      });
+    });
+    ctx.restore();
+  }
+};
+const lsDia = d => String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+const lsClave = d => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+
+function lsSerieTiempo(base) {
+  const hoy = new Date();
+  let min = new Date(Math.min.apply(null, base.map(l => new Date(l.created_at).getTime())));
+  min.setHours(0, 0, 0, 0);
+  const semanal = (hoy - min) / 86400000 > 45;
+  if (semanal) min.setDate(min.getDate() - ((min.getDay() + 6) % 7));
+  const puntos = [], idx = {};
+  for (let d = new Date(min); d <= hoy; d.setDate(d.getDate() + (semanal ? 7 : 1))) { idx[lsClave(d)] = puntos.length; puntos.push(new Date(d)); }
+  const llave = f => { const d = new Date(f); d.setHours(0, 0, 0, 0); if (semanal) d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return lsClave(d); };
+  const nuevos = puntos.map(() => 0), form = puntos.map(() => 0);
+  base.forEach(l => {
+    const i = idx[llave(l.created_at)]; if (i != null) nuevos[i]++;
+    if (l.datos_completados_at) { const j = idx[llave(l.datos_completados_at)]; if (j != null) form[j]++; }
+  });
+  return { labels: puntos.map(d => (semanal ? 'Sem ' : '') + lsDia(d)), nuevos, form, semanal };
+}
+
+async function lsGraficos(base) {
+  const box = document.getElementById('ls-graficos');
+  if (!box) return;
+  const tok = ++lsTok;
+  Object.values(lsCharts).forEach(c => { try { c.destroy(); } catch (e) {} });
+  lsCharts = {};
+  if (!base.length) { box.innerHTML = '<div style="padding:12px 0;font-size:13px;color:var(--text3)">No hay leads con estos filtros.</div>'; return; }
+  try { await cargarLib('chart'); } catch (e) { box.innerHTML = '<div style="padding:12px 0;font-size:13px;color:#b42318">' + bcEsc(e.message) + '</div>'; return; }
+  if (tok !== lsTok) return;
+  Chart.defaults.font.family = 'Urbanist, Arial, sans-serif';
+  Chart.defaults.color = LS_C.suave;
+
+  const total = base.length, pct = n => Math.round(n * 100 / total);
+  const cnt = fn => base.filter(fn).length;
+  const caja = (id, titulo, sub, alto) => '<div style="border:1.5px solid var(--border);border-radius:12px;padding:14px;background:var(--white)">' +
+    '<div style="font-weight:700;font-size:14px">' + titulo + '</div><div style="font-size:11px;color:var(--text3);margin:2px 0 8px">' + sub + '</div>' +
+    '<div style="position:relative;height:' + alto + 'px"><canvas id="' + id + '"></canvas></div></div>';
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">' +
+    caja('ls-ch-tiempo', 'Leads en el tiempo', 'Altas y formularios completados, por día o semana', 240) +
+    caja('ls-ch-embudo', 'Avance de los leads', 'Les escribimos por mail o WhatsApp · Respondieron o completaron el formulario · No son excluyentes', 240) +
+    caja('ls-ch-form', 'Formulario de datos', 'Estado del formulario sobre el total', 90) +
+    caja('ls-ch-tipo', 'Tipo de cliente', 'Según lo que completaron en el formulario', 90) +
+    caja('ls-ch-recs', 'Recordatorios de WhatsApp y respuestas', 'Leads según cuántos recordatorios recibieron, y cuántos respondieron', 240) +
+    caja('ls-ch-estado', 'Estado de los leads', 'Etapa comercial actual', 240) +
+    caja('ls-ch-sc', 'Días desde el último contacto del equipo', 'Solo leads abiertos (sin convertidos ni rechazados)', 240) +
+    caja('ls-ch-resp', 'Leads por responsable', 'Leads asignados', 240) +
+    '</div>';
+
+  const ejeX = (extra) => Object.assign({ grid: { display: false }, border: { color: LS_C.grilla }, ticks: { color: LS_C.suave, font: { size: 11 } } }, extra || {});
+  const ejeY = (extra) => Object.assign({ beginAtZero: true, grid: { color: LS_C.grilla }, border: { display: false }, ticks: { color: LS_C.suave, font: { size: 11 }, precision: 0 } }, extra || {});
+  const nuevo = (id, cfg) => { const el = document.getElementById(id); if (el) lsCharts[id] = new Chart(el, cfg); };
+  const sinLeyenda = { legend: { display: false } };
+
+  // 1) Línea: altas y formularios completados
+  const t = lsSerieTiempo(base);
+  nuevo('ls-ch-tiempo', {
+    type: 'line',
+    data: { labels: t.labels, datasets: [
+      { label: 'Leads nuevos', data: t.nuevos, borderColor: LS_C.azul, backgroundColor: 'rgba(42,120,214,0.10)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 3, pointBackgroundColor: LS_C.azul, pointBorderColor: '#fff', pointBorderWidth: 2 },
+      { label: 'Completaron el formulario', data: t.form, borderColor: LS_C.aqua, backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, pointRadius: 3, pointBackgroundColor: LS_C.aqua, pointBorderColor: '#fff', pointBorderWidth: 2 },
+    ] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: LS_C.tinta } } },
+      scales: { x: ejeX({ ticks: { color: LS_C.suave, font: { size: 11 }, maxTicksLimit: 8, maxRotation: 0 } }), y: ejeY() } }
+  });
+
+  // 2) Embudo horizontal, una sola tonalidad de claro a oscuro
+  const etapas = [
+    ['Leads', total],
+    ['Les escribimos', cnt(l => lsEscribimos(l))],
+    ['Respondieron', cnt(l => lsRespuesta(l) || !!l.datos_completados_at)],
+    ['Contacto del equipo', cnt(l => l.e.act > 0)],
+    ['Con cotización', cnt(l => l.e.cotiz || l.estado === 'cotizado' || l.estado === 'convertido')],
+    ['Convertidos', cnt(l => l.estado === 'convertido')],
+  ];
+  nuevo('ls-ch-embudo', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: etapas.map(e => e[0]), datasets: [{ data: etapas.map(e => e[1]), backgroundColor: LS_SEC, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22, lsFmt: etapas.map(e => e[1] + ' (' + pct(e[1]) + '%)') }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, layout: { padding: { right: 70 } }, plugins: sinLeyenda,
+      scales: { x: ejeX({ display: false, beginAtZero: true, max: total }), y: ejeX({ ticks: { color: LS_C.tinta, font: { size: 11 } } }) } }
+  });
+
+  // 3) y 4) barras apiladas al 100%, con la cuenta en la leyenda
+  const apilada = (id, partes) => nuevo(id, {
+    type: 'bar',
+    data: { labels: [''], datasets: partes.map(([nombre, n, color]) => ({ label: nombre + ' · ' + n + ' (' + pct(n) + '%)', data: [n], backgroundColor: color, borderColor: '#fff', borderWidth: 2, borderRadius: 4, borderSkipped: false })) },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, color: LS_C.tinta, font: { size: 11 } } } },
+      scales: { x: { stacked: true, display: false, max: total }, y: { stacked: true, display: false } } }
+  });
+  apilada('ls-ch-form', [
+    ['Completo', cnt(l => !!l.datos_completados_at), LS_C.aqua],
+    ['Pendiente', cnt(l => !!l.datos_solicitados_at && !l.datos_completados_at), LS_C.azul],
+    ['Sin solicitar', cnt(l => !l.datos_solicitados_at && !l.datos_completados_at), LS_C.gris],
+  ]);
+  apilada('ls-ch-tipo', [
+    ['Persona física', cnt(l => l.tipoP === 'fisica'), LS_C.azul],
+    ['Persona jurídica', cnt(l => l.tipoP === 'juridica'), LS_C.naranja],
+    ['Sin dato', cnt(l => !l.tipoP), LS_C.gris],
+  ]);
+
+  // 5) Barras agrupadas: recordatorios recibidos vs. respondieron
+  const nRec = l => (l.wc && l.wc.recordatorios_enviados) ? Math.min(l.wc.recordatorios_enviados, 3) : 0;
+  const grupos = [0, 1, 2, 3].map(n => base.filter(l => nRec(l) === n));
+  nuevo('ls-ch-recs', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: ['Ninguno', '1', '2', '3 o más'], datasets: [
+      { label: 'Leads', data: grupos.map(g => g.length), backgroundColor: LS_C.azul, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 34 },
+      { label: 'Respondieron', data: grupos.map(g => g.filter(l => lsRespuesta(l)).length), backgroundColor: LS_C.aqua, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 34 },
+    ] },
+    options: { maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, color: LS_C.tinta } } },
+      scales: { x: ejeX(), y: ejeY() } }
+  });
+
+  // 6) Estados del pipeline
+  const estados = [['nuevo', 'Nuevo'], ['contactado', 'Contactado'], ['calificado', 'Calificado'], ['cotizado', 'Cotizado'], ['convertido', 'Convertido'], ['rechazado', 'Rechazado']];
+  nuevo('ls-ch-estado', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: estados.map(e => e[1]), datasets: [{ data: estados.map(e => cnt(l => l.estado === e[0])), backgroundColor: [LS_SEC[1], LS_SEC[2], LS_SEC[3], LS_SEC[4], LS_SEC[5], LS_C.gris], borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 40 }] },
+    options: { maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: sinLeyenda, scales: { x: ejeX({ ticks: { color: LS_C.suave, font: { size: 9 }, maxRotation: 0, autoSkip: false } }), y: ejeY() } }
+  });
+
+  // 7) Antigüedad del último contacto del equipo (solo leads abiertos)
+  const abiertos = base.filter(l => l.estado !== 'convertido' && l.estado !== 'rechazado');
+  const dias = l => Math.floor((Date.now() - new Date(l.e.ult || l.created_at).getTime()) / 86400000);
+  const rangos = [['0 a 2 días', 0, 2], ['3 a 6 días', 3, 6], ['7 a 13 días', 7, 13], ['14 o más', 14, 99999]];
+  nuevo('ls-ch-sc', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: rangos.map(r => r[0]), datasets: [{ data: rangos.map(r => abiertos.filter(l => { const d = dias(l); return d >= r[1] && d <= r[2]; }).length), backgroundColor: [LS_C.azul, LS_C.naranja, LS_C.naranja, LS_C.naranja], borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 48 }] },
+    options: { maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: sinLeyenda, scales: { x: ejeX(), y: ejeY() } }
+  });
+
+  // 8) Leads por responsable (los 8 con más leads)
+  const porResp = {}; base.forEach(l => { const r = l.responsable || 'Sin asignar'; porResp[r] = (porResp[r] || 0) + 1; });
+  const top = Object.entries(porResp).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  nuevo('ls-ch-resp', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: top.map(x => x[0].split('@')[0].slice(0, 22)), datasets: [{ data: top.map(x => x[1]), backgroundColor: LS_C.azul, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 20 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, layout: { padding: { right: 36 } }, plugins: sinLeyenda,
+      scales: { x: ejeX({ display: false, beginAtZero: true }), y: ejeX({ ticks: { color: LS_C.tinta, font: { size: 11 } } }) } }
+  });
 }
 
 async function lsAbrirLead(id) { if (!allLeads.some(x => x.id === id)) await loadLeads(); abrirDetalleLead(id); }
