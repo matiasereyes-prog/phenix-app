@@ -2704,12 +2704,12 @@ async function cargarEstadisticasLeads() {
         .order('created_at', { ascending: true }).range(desde, desde + 999);
       if (error || !data) break;
       data.forEach(h => {
-        const e = hist[h.lead_id] || (hist[h.lead_id] = { act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false });
+        const e = hist[h.lead_id] || (hist[h.lead_id] = { act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false, ev: [] });
         const r = h.responsable, d = String(h.descripcion || '');
         const equipo = r !== 'Automático' && r !== 'Cliente' && r !== 'Bot';
-        if (equipo) { e.act++; e.ult = h.created_at; }
-        if (h.tipo === 'email') { if (r === 'Automático') e.mailAuto++; else e.mailMan++; }
-        if (h.tipo === 'whatsapp') { if (r === 'Cliente') e.waCli++; else if (r === 'Bot') e.waAuto++; else e.waMan++; }
+        if (equipo) { e.act++; e.ult = h.created_at; e.ev.push(['eq', h.created_at]); }
+        if (h.tipo === 'email') { if (r === 'Automático') { e.mailAuto++; e.ev.push(['mail_auto', h.created_at]); } else { e.mailMan++; e.ev.push(['mail_eq', h.created_at]); } }
+        if (h.tipo === 'whatsapp') { if (r === 'Cliente') { e.waCli++; e.ev.push(['wa_cli', h.created_at]); } else if (r === 'Bot') { e.waAuto++; e.ev.push(['wa_auto', h.created_at]); } else { e.waMan++; e.ev.push(['wa_eq', h.created_at]); } }
         if (/cotizaci[oó]n enviada|se envi[oó] cotizaci[oó]n/i.test(d)) e.cotiz = true;
         if (/informe crediticio/i.test(d)) e.informe = true;
       });
@@ -2717,7 +2717,7 @@ async function cargarEstadisticasLeads() {
     }
     const tipos = {}; (rd.data || []).forEach(x => { tipos[x.lead_id] = x.tipo_persona; });
     const wcs = {}; (rw.data || []).forEach(x => { wcs[x.telefono_key] = x; });
-    const vacio = () => ({ act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false });
+    const vacio = () => ({ act: 0, ult: null, mailAuto: 0, mailMan: 0, waAuto: 0, waMan: 0, waCli: 0, cotiz: false, informe: false, ev: [] });
     lsBase = (rl.data || []).map(l => ({ ...l, e: hist[l.id] || vacio(), wc: wcs[lsTel(l.telefono)] || null, tipoP: tipos[l.id] || null }));
     const sel = document.getElementById('ls-f-resp');
     const actual = sel.value;
@@ -2850,9 +2850,22 @@ async function lsGraficos(base) {
   const caja = (id, titulo, sub, alto) => '<div style="border:1.5px solid var(--border);border-radius:12px;padding:14px;background:var(--white)">' +
     '<div style="font-weight:700;font-size:14px">' + titulo + '</div><div style="font-size:11px;color:var(--text3);margin:2px 0 8px">' + sub + '</div>' +
     '<div style="position:relative;height:' + alto + 'px"><canvas id="' + id + '"></canvas></div></div>';
-  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">' +
+  const evs = []; base.forEach(l => (l.e.ev || []).forEach(x => evs.push(x)));
+  const nEv = k => evs.filter(x => x[0] === k).length;
+  const mA = nEv('mail_auto'), mE = nEv('mail_eq'), wA = nEv('wa_auto'), wE = nEv('wa_eq'), wC = nEv('wa_cli'), acc = nEv('eq');
+  const kp = (n, titulo, sub) => '<div style="border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--white)"><div style="font-size:26px;font-weight:800;line-height:1">' + n + '</div><div style="font-size:12px;color:var(--text2);margin-top:6px">' + titulo + '</div><div style="font-size:11px;color:var(--text3);margin-top:2px">' + sub + '</div></div>';
+  const tira = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px">' +
+    kp(mA + mE, 'Mails enviados', 'automáticos ' + mA + ' · del equipo ' + mE) +
+    kp(wA + wE, 'WhatsApp enviados', 'automáticos ' + wA + ' · del equipo ' + wE) +
+    kp(wC, 'Respuestas de clientes por WhatsApp', 'mensajes recibidos de leads') +
+    kp(((mA + mE + wA + wE) / total).toFixed(1), 'Mensajes enviados por lead', 'mails y WhatsApp, en promedio') +
+    kp(acc, 'Acciones del equipo', 'registros en el historial de los leads') + '</div>';
+  box.innerHTML = tira + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">' +
     caja('ls-ch-tiempo', 'Leads en el tiempo', 'Altas y formularios completados, por día o semana', 240) +
+    caja('ls-ch-msgs', 'Mensajes enviados en el tiempo', 'Mails y WhatsApp, por día o semana', 240) +
     caja('ls-ch-embudo', 'Avance de los leads', 'Les escribimos por mail o WhatsApp · Respondieron o completaron el formulario · No son excluyentes', 240) +
+    caja('ls-ch-dow', 'Actividad por día de la semana', 'Altas, acciones del equipo y respuestas de clientes', 240) +
+    caja('ls-ch-hora', 'Actividad por hora del día', 'Cuándo responden los clientes y cuándo actúa el equipo (hora local)', 240) +
     caja('ls-ch-form', 'Formulario de datos', 'Estado del formulario sobre el total', 90) +
     caja('ls-ch-tipo', 'Tipo de cliente', 'Según lo que completaron en el formulario', 90) +
     caja('ls-ch-recs', 'Recordatorios de WhatsApp y respuestas', 'Leads según cuántos recordatorios recibieron, y cuántos respondieron', 240) +
@@ -2877,6 +2890,62 @@ async function lsGraficos(base) {
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: LS_C.tinta } } },
       scales: { x: ejeX({ ticks: { color: LS_C.suave, font: { size: 11 }, maxTicksLimit: 8, maxRotation: 0 } }), y: ejeY() } }
+  });
+
+  // 1b) Mensajes enviados por día o semana (barras apiladas)
+  if (evs.length) {
+    const fm = evs.filter(x => x[0] === 'mail_auto' || x[0] === 'mail_eq' || x[0] === 'wa_auto' || x[0] === 'wa_eq');
+    const base0 = fm.length ? fm : evs;
+    const hoyM = new Date();
+    let minM = new Date(Math.min.apply(null, base0.map(x => new Date(x[1]).getTime()))); minM.setHours(0, 0, 0, 0);
+    const semM = (hoyM - minM) / 86400000 > 45;
+    if (semM) minM.setDate(minM.getDate() - ((minM.getDay() + 6) % 7));
+    const pts = [], ix = {};
+    for (let d = new Date(minM); d <= hoyM; d.setDate(d.getDate() + (semM ? 7 : 1))) { ix[lsClave(d)] = pts.length; pts.push(new Date(d)); }
+    const llM = f => { const d = new Date(f); d.setHours(0, 0, 0, 0); if (semM) d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return lsClave(d); };
+    const serie = ks => { const a = pts.map(() => 0); fm.forEach(x => { if (ks.includes(x[0])) { const i = ix[llM(x[1])]; if (i != null) a[i]++; } }); return a; };
+    const barra = (label, data, color) => ({ label, data, backgroundColor: color, borderColor: '#fff', borderWidth: 1, stack: 'm', maxBarThickness: 26 });
+    nuevo('ls-ch-msgs', {
+      type: 'bar',
+      data: { labels: pts.map(d => (semM ? 'Sem ' : '') + lsDia(d)), datasets: [
+        barra('Mails', serie(['mail_auto', 'mail_eq']), LS_C.azul),
+        barra('WhatsApp automáticos', serie(['wa_auto']), LS_C.aqua),
+        barra('WhatsApp del equipo', serie(['wa_eq']), LS_C.naranja),
+      ] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, color: LS_C.tinta } } },
+        scales: { x: ejeX({ stacked: true, ticks: { color: LS_C.suave, font: { size: 11 }, maxTicksLimit: 8, maxRotation: 0 } }), y: ejeY({ stacked: true }) } }
+    });
+  }
+
+  // 4) Actividad por día de la semana (lunes a domingo)
+  const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const porDia = f => { const a = [0, 0, 0, 0, 0, 0, 0]; f.forEach(iso => { a[(new Date(iso).getDay() + 6) % 7]++; }); return a; };
+  const gb = (label, data, color) => ({ label, data, backgroundColor: color, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 22 });
+  nuevo('ls-ch-dow', {
+    type: 'bar',
+    data: { labels: DIAS, datasets: [
+      gb('Leads nuevos', porDia(base.map(l => l.created_at)), LS_C.azul),
+      gb('Acciones del equipo', porDia(evs.filter(x => x[0] === 'eq').map(x => x[1])), LS_C.naranja),
+      gb('Respuestas de clientes', porDia(evs.filter(x => x[0] === 'wa_cli').map(x => x[1])), LS_C.aqua),
+    ] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, color: LS_C.tinta } } },
+      scales: { x: ejeX(), y: ejeY() } }
+  });
+
+  // 5) Actividad por hora del día
+  const porHora = f => { const a = new Array(24).fill(0); f.forEach(iso => { a[new Date(iso).getHours()]++; }); return a; };
+  const linea = (label, data, color) => ({ label, data, borderColor: color, backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, pointRadius: 2.5, pointBackgroundColor: color, pointBorderColor: '#fff', pointBorderWidth: 1.5 });
+  nuevo('ls-ch-hora', {
+    type: 'line',
+    data: { labels: Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + 'h'), datasets: [
+      linea('Respuestas de clientes', porHora(evs.filter(x => x[0] === 'wa_cli').map(x => x[1])), LS_C.aqua),
+      linea('Acciones del equipo', porHora(evs.filter(x => x[0] === 'eq').map(x => x[1])), LS_C.naranja),
+    ] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: LS_C.tinta } } },
+      scales: { x: ejeX({ ticks: { color: LS_C.suave, font: { size: 10 }, maxTicksLimit: 12, maxRotation: 0 } }), y: ejeY() } }
   });
 
   // 2) Embudo horizontal, una sola tonalidad de claro a oscuro
