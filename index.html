@@ -2871,6 +2871,7 @@ async function lsGraficos(base) {
     caja('ls-ch-recs', 'Recordatorios de WhatsApp y respuestas', 'Leads según cuántos recordatorios recibieron, y cuántos respondieron', 240) +
     caja('ls-ch-estado', 'Estado de los leads', 'Etapa comercial actual', 240) +
     caja('ls-ch-sc', 'Días desde el último contacto del equipo', 'Solo leads abiertos (sin convertidos ni rechazados)', 240) +
+    caja('ls-ch-primer', 'Tiempo hasta el primer contacto', 'Desde el alta hasta el primer registro del equipo', 240) +
     caja('ls-ch-resp', 'Leads por responsable', 'Leads asignados', 240) +
     '</div>';
 
@@ -3011,6 +3012,17 @@ async function lsGraficos(base) {
     type: 'bar', plugins: [lsValores],
     data: { labels: rangos.map(r => r[0]), datasets: [{ data: rangos.map(r => abiertos.filter(l => { const d = dias(l); return d >= r[1] && d <= r[2]; }).length), backgroundColor: [LS_C.azul, LS_C.naranja, LS_C.naranja, LS_C.naranja], borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 48 }] },
     options: { maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: sinLeyenda, scales: { x: ejeX(), y: ejeY() } }
+  });
+
+  // 7b) Tiempo hasta el primer contacto del equipo
+  const horasHasta = l => { const x = (l.e.ev || []).find(v => v[0] === 'eq'); return x ? Math.max(0, (new Date(x[1]) - new Date(l.created_at)) / 3600000) : null; };
+  const hs = base.map(horasHasta);
+  const tramos = [['< 1 h', h => h < 1, LS_C.azul], ['1 a 24 h', h => h >= 1 && h < 24, LS_C.azul], ['1 a 3 d', h => h >= 24 && h < 72, LS_C.azul], ['+ de 3 d', h => h >= 72, LS_C.naranja]];
+  const datosPrimer = tramos.map(t => hs.filter(h => h !== null && t[1](h)).length).concat([hs.filter(h => h === null).length]);
+  nuevo('ls-ch-primer', {
+    type: 'bar', plugins: [lsValores],
+    data: { labels: tramos.map(t => t[0]).concat(['Sin contacto']), datasets: [{ data: datosPrimer, backgroundColor: tramos.map(t => t[2]).concat([LS_C.gris]), borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 48 }] },
+    options: { maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: sinLeyenda, scales: { x: ejeX({ ticks: { color: LS_C.suave, font: { size: 10 }, maxRotation: 0, autoSkip: false } }), y: ejeY() } }
   });
 
   // 8) Leads por responsable (los 8 con más leads)
